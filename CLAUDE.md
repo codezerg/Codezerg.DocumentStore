@@ -182,3 +182,18 @@ The QueryTranslator has specific limitations:
 - The connection is opened in the constructor and must be disposed properly
 - Collections share the same connection instance
 - Transactions use the same connection to ensure ACID properties
+
+## Additional Resources
+
+### SQLite JSONB Binary Format
+
+For information about SQLite's binary JSON format (JSONB) and potential future optimization strategies, see:
+
+**[docs/SQLITE_JSONB_REFERENCE.md](docs/SQLITE_JSONB_REFERENCE.md)** - Comprehensive reference covering:
+- JSONB binary encoding format and performance benefits
+- SQL function reference for JSONB operations
+- Migration strategies from JSON text to JSONB
+- Version detection and compatibility requirements (SQLite 3.45.0+)
+- Implementation examples for Codezerg.DocumentStore
+
+This document provides detailed guidance for potentially migrating from JSON text storage to JSONB binary format for improved performance (approximately 50% CPU reduction according to SQLite benchmarks).
