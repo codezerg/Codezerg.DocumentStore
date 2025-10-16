@@ -8,13 +8,13 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        Console.WriteLine("Codezerg.DocumentStore - JSONB Serialization Benchmarks");
-        Console.WriteLine("=========================================================");
+        Console.WriteLine("Codezerg.DocumentStore - Performance Benchmarks");
+        Console.WriteLine("================================================");
         Console.WriteLine();
-        Console.WriteLine("This benchmark compares:");
-        Console.WriteLine("1. JSON text serialization (System.Text.Json)");
-        Console.WriteLine("2. JSON text + SQLite jsonb() conversion");
-        Console.WriteLine("3. Direct JSONB binary serialization (BinaryDocumentSerializer)");
+        Console.WriteLine("Benchmarking JSON serialization and SQLite operations:");
+        Console.WriteLine("- Serialization (System.Text.Json)");
+        Console.WriteLine("- Database inserts with SQLite jsonb()");
+        Console.WriteLine("- Database reads and deserialization");
         Console.WriteLine();
         Console.WriteLine("Running benchmarks...");
         Console.WriteLine();

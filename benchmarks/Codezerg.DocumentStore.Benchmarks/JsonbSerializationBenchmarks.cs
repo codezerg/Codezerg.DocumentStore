@@ -1,4 +1,5 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Order;
 using Codezerg.DocumentStore.Serialization;
 using Dapper;
@@ -10,12 +11,12 @@ using System.Linq;
 namespace Codezerg.DocumentStore.Benchmarks;
 
 /// <summary>
-/// Benchmarks comparing JSON text serialization + SQLite jsonb() conversion
-/// versus direct JSONB binary serialization.
+/// Benchmarks for DocumentStore serialization and database operations.
 /// </summary>
 [MemoryDiagnoser]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
 [RankColumn]
+[SimpleJob(RuntimeMoniker.Net90, warmupCount: 1, iterationCount: 3, launchCount: 1)]
 public class JsonbSerializationBenchmarks
 {
     private SqliteConnection? _connection;
@@ -154,6 +155,16 @@ public class JsonbSerializationBenchmarks
                 data BLOB NOT NULL
             );
         ");
+
+        // Pre-insert documents for read benchmarks
+        var smallJson = DocumentSerializer.Serialize(_smallDoc);
+        _connection.Execute("INSERT INTO documents (id, data) VALUES (100, jsonb(@json))", new { json = smallJson });
+
+        var mediumJson = DocumentSerializer.Serialize(_mediumDoc);
+        _connection.Execute("INSERT INTO documents (id, data) VALUES (200, jsonb(@json))", new { json = mediumJson });
+
+        var largeJson = DocumentSerializer.Serialize(_largeDoc);
+        _connection.Execute("INSERT INTO documents (id, data) VALUES (300, jsonb(@json))", new { json = largeJson });
     }
 
     [GlobalCleanup]
@@ -163,155 +174,88 @@ public class JsonbSerializationBenchmarks
     }
 
     // ============================================
-    // Small Document Benchmarks (~500 bytes)
+    // Serialization Benchmarks
     // ============================================
 
-    [Benchmark(Description = "Small: JSON text serialization only")]
-    public string SmallDoc_JsonText()
+    [Benchmark(Description = "Small: Serialize to JSON")]
+    public string SmallDoc_Serialize()
     {
         return DocumentSerializer.Serialize(_smallDoc);
     }
 
-    [Benchmark(Description = "Small: JSONB binary serialization only")]
-    public byte[] SmallDoc_JsonbBinary()
+    [Benchmark(Description = "Medium: Serialize to JSON")]
+    public string MediumDoc_Serialize()
     {
-        return BinaryDocumentSerializer.SerializeToJsonb(_smallDoc);
+        return DocumentSerializer.Serialize(_mediumDoc);
     }
 
-    [Benchmark(Description = "Small: JSON + SQLite jsonb() conversion")]
-    public void SmallDoc_JsonWithSqliteConversion()
+    [Benchmark(Description = "Large: Serialize to JSON")]
+    public string LargeDoc_Serialize()
     {
-        var json = DocumentSerializer.Serialize(_smallDoc);
-        _connection!.ExecuteScalar<byte[]>("SELECT jsonb(@json)", new { json });
+        return DocumentSerializer.Serialize(_largeDoc);
     }
 
-    [Benchmark(Description = "Small: Full insert with JSON + jsonb()")]
-    public void SmallDoc_InsertWithJsonbFunction()
+    // ============================================
+    // Insert Benchmarks
+    // ============================================
+
+    [Benchmark(Description = "Small: Full insert with jsonb()")]
+    public void SmallDoc_Insert()
     {
         var json = DocumentSerializer.Serialize(_smallDoc);
         _connection!.Execute("INSERT INTO documents (id, data) VALUES (1, jsonb(@json)); DELETE FROM documents WHERE id = 1;",
             new { json });
     }
 
-    [Benchmark(Description = "Small: Full insert with JSONB binary")]
-    public void SmallDoc_InsertWithJsonbBinary()
-    {
-        var jsonb = BinaryDocumentSerializer.SerializeToJsonb(_smallDoc);
-        _connection!.Execute("INSERT INTO documents (id, data) VALUES (1, @jsonb); DELETE FROM documents WHERE id = 1;",
-            new { jsonb });
-    }
-
-    // ============================================
-    // Medium Document Benchmarks (~2-5KB)
-    // ============================================
-
-    [Benchmark(Description = "Medium: JSON text serialization only")]
-    public string MediumDoc_JsonText()
-    {
-        return DocumentSerializer.Serialize(_mediumDoc);
-    }
-
-    [Benchmark(Description = "Medium: JSONB binary serialization only")]
-    public byte[] MediumDoc_JsonbBinary()
-    {
-        return BinaryDocumentSerializer.SerializeToJsonb(_mediumDoc);
-    }
-
-    [Benchmark(Description = "Medium: JSON + SQLite jsonb() conversion")]
-    public void MediumDoc_JsonWithSqliteConversion()
-    {
-        var json = DocumentSerializer.Serialize(_mediumDoc);
-        _connection!.ExecuteScalar<byte[]>("SELECT jsonb(@json)", new { json });
-    }
-
-    [Benchmark(Description = "Medium: Full insert with JSON + jsonb()")]
-    public void MediumDoc_InsertWithJsonbFunction()
+    [Benchmark(Description = "Medium: Full insert with jsonb()")]
+    public void MediumDoc_Insert()
     {
         var json = DocumentSerializer.Serialize(_mediumDoc);
         _connection!.Execute("INSERT INTO documents (id, data) VALUES (2, jsonb(@json)); DELETE FROM documents WHERE id = 2;",
             new { json });
     }
 
-    [Benchmark(Description = "Medium: Full insert with JSONB binary")]
-    public void MediumDoc_InsertWithJsonbBinary()
-    {
-        var jsonb = BinaryDocumentSerializer.SerializeToJsonb(_mediumDoc);
-        _connection!.Execute("INSERT INTO documents (id, data) VALUES (2, @jsonb); DELETE FROM documents WHERE id = 2;",
-            new { jsonb });
-    }
-
-    // ============================================
-    // Large Document Benchmarks (~10-50KB)
-    // ============================================
-
-    [Benchmark(Description = "Large: JSON text serialization only")]
-    public string LargeDoc_JsonText()
-    {
-        return DocumentSerializer.Serialize(_largeDoc);
-    }
-
-    [Benchmark(Description = "Large: JSONB binary serialization only")]
-    public byte[] LargeDoc_JsonbBinary()
-    {
-        return BinaryDocumentSerializer.SerializeToJsonb(_largeDoc);
-    }
-
-    [Benchmark(Description = "Large: JSON + SQLite jsonb() conversion")]
-    public void LargeDoc_JsonWithSqliteConversion()
-    {
-        var json = DocumentSerializer.Serialize(_largeDoc);
-        _connection!.ExecuteScalar<byte[]>("SELECT jsonb(@json)", new { json });
-    }
-
-    [Benchmark(Description = "Large: Full insert with JSON + jsonb()")]
-    public void LargeDoc_InsertWithJsonbFunction()
+    [Benchmark(Description = "Large: Full insert with jsonb()")]
+    public void LargeDoc_Insert()
     {
         var json = DocumentSerializer.Serialize(_largeDoc);
         _connection!.Execute("INSERT INTO documents (id, data) VALUES (3, jsonb(@json)); DELETE FROM documents WHERE id = 3;",
             new { json });
     }
 
-    [Benchmark(Description = "Large: Full insert with JSONB binary")]
-    public void LargeDoc_InsertWithJsonbBinary()
+    // ============================================
+    // Read Benchmarks
+    // ============================================
+
+    [Benchmark(Description = "Small: Read and deserialize")]
+    public User SmallDoc_Read()
     {
-        var jsonb = BinaryDocumentSerializer.SerializeToJsonb(_largeDoc);
-        _connection!.Execute("INSERT INTO documents (id, data) VALUES (3, @jsonb); DELETE FROM documents WHERE id = 3;",
-            new { jsonb });
+        var json = _connection!.ExecuteScalar<string>("SELECT json(data) FROM documents WHERE id = 100");
+        return DocumentSerializer.Deserialize<User>(json)!;
+    }
+
+    [Benchmark(Description = "Medium: Read and deserialize")]
+    public Order MediumDoc_Read()
+    {
+        var json = _connection!.ExecuteScalar<string>("SELECT json(data) FROM documents WHERE id = 200");
+        return DocumentSerializer.Deserialize<Order>(json)!;
+    }
+
+    [Benchmark(Description = "Large: Read and deserialize")]
+    public BlogPost LargeDoc_Read()
+    {
+        var json = _connection!.ExecuteScalar<string>("SELECT json(data) FROM documents WHERE id = 300");
+        return DocumentSerializer.Deserialize<BlogPost>(json)!;
     }
 
     // ============================================
     // Round-trip Benchmarks
     // ============================================
 
-    [Benchmark(Description = "Round-trip: JSON text (serialize + deserialize)")]
-    public User RoundTrip_JsonText()
+    [Benchmark(Description = "Round-trip: Serialize and deserialize")]
+    public User RoundTrip()
     {
         var json = DocumentSerializer.Serialize(_smallDoc);
         return DocumentSerializer.Deserialize<User>(json)!;
-    }
-
-    [Benchmark(Description = "Round-trip: JSONB binary (serialize + deserialize)")]
-    public User RoundTrip_JsonbBinary()
-    {
-        var jsonb = BinaryDocumentSerializer.SerializeToJsonb(_smallDoc);
-        return BinaryDocumentSerializer.DeserializeFromJsonb<User>(jsonb)!;
-    }
-
-    // ============================================
-    // Size Comparison
-    // ============================================
-
-    [Benchmark(Description = "Size: JSON text size")]
-    public int Size_JsonText()
-    {
-        var json = DocumentSerializer.Serialize(_mediumDoc);
-        return System.Text.Encoding.UTF8.GetByteCount(json);
-    }
-
-    [Benchmark(Description = "Size: JSONB binary size")]
-    public int Size_JsonbBinary()
-    {
-        var jsonb = BinaryDocumentSerializer.SerializeToJsonb(_mediumDoc);
-        return jsonb.Length;
     }
 }
