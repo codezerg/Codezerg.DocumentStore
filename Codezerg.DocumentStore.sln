@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Codezerg.DocumentStore", "src\Codezerg.DocumentStore\Codezerg.DocumentStore.csproj", "{CCA443A8-1DA5-D54C-03CA-7D689A9C040A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleApp", "samples\SampleApp\SampleApp.csproj", "{6D7DB715-DFD2-B5C0-C9FE-1AE5EAA95614}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CCA443A8-1DA5-D54C-03CA-7D689A9C040A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCA443A8-1DA5-D54C-03CA-7D689A9C040A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCA443A8-1DA5-D54C-03CA-7D689A9C040A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCA443A8-1DA5-D54C-03CA-7D689A9C040A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D7DB715-DFD2-B5C0-C9FE-1AE5EAA95614}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D7DB715-DFD2-B5C0-C9FE-1AE5EAA95614}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D7DB715-DFD2-B5C0-C9FE-1AE5EAA95614}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D7DB715-DFD2-B5C0-C9FE-1AE5EAA95614}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7F9558B3-E995-4ABC-8390-DB14AE8B1BEA}
+	EndGlobalSection
+EndGlobal
