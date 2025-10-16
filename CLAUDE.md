@@ -8,7 +8,7 @@ Codezerg.DocumentStore is a document-oriented data layer for SQLite that provide
 
 **Target Framework**: .NET Standard 2.0 (main library), .NET 9.0 (tests and samples)
 
-**Key Dependencies**: Microsoft.Data.Sqlite, Dapper, System.Text.Json, Microsoft.Extensions.Logging.Abstractions, Polly
+**Key Dependencies**: Microsoft.Data.Sqlite, Dapper, System.Text.Json, Microsoft.Extensions.Logging.Abstractions, Microsoft.Extensions.DependencyInjection.Abstractions, Microsoft.Extensions.Options, Polly
 
 ## Build and Test Commands
 
@@ -113,12 +113,36 @@ Documents are serialized to JSON using System.Text.Json with:
 
 ## Key Implementation Files
 
+All source files are located in `src/Codezerg.DocumentStore/`:
+
+### Core Implementation
 - **SqliteDocumentDatabase.cs**: Main database implementation, manages connections and schema
 - **SqliteDocumentCollection.cs**: Collection operations, query execution, index management
+- **SqliteDocumentTransaction.cs**: Transaction implementation wrapping SQLite transactions
 - **QueryTranslator.cs**: LINQ to SQL translation engine
-- **DocumentId.cs**: Unique identifier implementation
-- **DocumentSerializer.cs**: JSON serialization configuration
+- **DocumentId.cs**: Unique identifier implementation (12-byte ObjectId-inspired)
 - **Compat.cs**: .NET Standard 2.0 compatibility helpers
+
+### Interfaces
+- **IDocumentDatabase.cs**: Database interface defining collection management and transactions
+- **IDocumentCollection.cs**: Collection interface defining CRUD, query, and index operations
+- **IDocumentTransaction.cs**: Transaction interface for atomic operations
+
+### Dependency Injection
+- **ServiceCollectionExtensions.cs**: Extension methods for registering database with DI container (`AddDocumentDatabase`)
+
+### Configuration (`Configuration/` subdirectory)
+- **DocumentDatabaseOptions.cs**: Configuration options for database setup
+- **DocumentDatabaseOptionsBuilder.cs**: Fluent builder for configuration options
+
+### Serialization (`Serialization/` subdirectory)
+- **DocumentSerializer.cs**: JSON serialization configuration with camelCase naming
+- **DocumentIdJsonConverter.cs**: Custom JSON converter for DocumentId type
+
+### Exceptions (`Exceptions/` subdirectory)
+- **DocumentNotFoundException.cs**: Thrown when a document is not found
+- **DuplicateKeyException.cs**: Thrown when a unique index constraint is violated
+- **InvalidQueryException.cs**: Thrown when a LINQ query cannot be translated
 
 ## Common Development Patterns
 
