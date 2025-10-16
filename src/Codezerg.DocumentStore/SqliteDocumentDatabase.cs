@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -63,26 +64,26 @@ public class SqliteDocumentDatabase : IDocumentDatabase
     }
 
     /// <summary>
-    /// Creates a new database instance with a file path.
+    /// Initializes a new instance of the <see cref="SqliteDocumentDatabase"/> class using options pattern.
     /// </summary>
-    /// <param name="filePath">The database file path.</param>
+    /// <param name="options">The database configuration options.</param>
     /// <param name="logger">Optional logger.</param>
-    /// <returns>A new database instance.</returns>
-    public static SqliteDocumentDatabase Create(string filePath, ILogger<SqliteDocumentDatabase>? logger = null)
+    public SqliteDocumentDatabase(IOptions<Configuration.DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger = null)
+        : this(GetConnectionStringFromOptions(options), logger)
     {
-        var connectionString = $"Data Source={filePath}";
-        return new SqliteDocumentDatabase(connectionString, logger);
     }
 
-    /// <summary>
-    /// Creates a new in-memory database instance.
-    /// </summary>
-    /// <param name="logger">Optional logger.</param>
-    /// <returns>A new database instance.</returns>
-    public static SqliteDocumentDatabase CreateInMemory(ILogger<SqliteDocumentDatabase>? logger = null)
+    private static string GetConnectionStringFromOptions(IOptions<Configuration.DocumentDatabaseOptions> options)
     {
-        var connectionString = "Data Source=:memory:";
-        return new SqliteDocumentDatabase(connectionString, logger);
+        if (options == null)
+            throw new ArgumentNullException(nameof(options));
+
+        var optionsValue = options.Value;
+        if (optionsValue == null)
+            throw new ArgumentException("Options value cannot be null.", nameof(options));
+
+        optionsValue.Validate();
+        return optionsValue.ConnectionString!;
     }
 
     /// <inheritdoc/>

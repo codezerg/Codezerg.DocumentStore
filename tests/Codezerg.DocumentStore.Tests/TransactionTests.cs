@@ -9,7 +9,7 @@ public class TransactionTests : IDisposable
 
     public TransactionTests()
     {
-        _database = SqliteDocumentDatabase.CreateInMemory();
+        _database = new SqliteDocumentDatabase("Data Source=:memory:");
         _collection = _database.GetCollection<TestDocument>("test");
     }
 

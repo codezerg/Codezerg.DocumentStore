@@ -10,7 +10,7 @@ public class SqliteDocumentCollectionTests : IDisposable
 
     public SqliteDocumentCollectionTests()
     {
-        _database = SqliteDocumentDatabase.CreateInMemory();
+        _database = new SqliteDocumentDatabase("Data Source=:memory:");
         _users = _database.GetCollection<TestUser>("users");
     }
 

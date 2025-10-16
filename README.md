@@ -45,8 +45,8 @@ public class Address
 ```csharp
 using Codezerg.DocumentStore;
 
-// Create or open a database
-using var db = new SqliteDocumentDatabase("myapp.db");
+// Create or open a database with a connection string
+using var db = new SqliteDocumentDatabase("Data Source=myapp.db");
 
 // Get a collection (created automatically if it doesn't exist)
 var users = db.GetCollection<User>("users");
@@ -134,9 +134,38 @@ transaction.Commit();  // Atomically commit both operations
 Perfect for testing:
 
 ```csharp
-using var db = SqliteDocumentDatabase.CreateInMemory();
+// Direct instantiation
+using var db = new SqliteDocumentDatabase("Data Source=:memory:");
 var users = db.GetCollection<User>("users");
 // Use as normal - data is kept in memory
+```
+
+### Dependency Injection
+
+Use the extension method to register the database in your DI container:
+
+```csharp
+using Codezerg.DocumentStore;
+using Microsoft.Extensions.DependencyInjection;
+
+// Register with connection string
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=myapp.db"));
+
+// For in-memory databases
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=:memory:"));
+
+// Then inject IDocumentDatabase
+public class MyService
+{
+    private readonly IDocumentDatabase _database;
+
+    public MyService(IDocumentDatabase database)
+    {
+        _database = database;
+    }
+}
 ```
 
 ### Working with DocumentId

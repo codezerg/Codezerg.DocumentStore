@@ -8,7 +8,7 @@ public class SqliteDocumentDatabaseTests : IDisposable
 
     public SqliteDocumentDatabaseTests()
     {
-        _database = SqliteDocumentDatabase.CreateInMemory();
+        _database = new SqliteDocumentDatabase("Data Source=:memory:");
     }
 
     public void Dispose()
@@ -17,21 +17,21 @@ public class SqliteDocumentDatabaseTests : IDisposable
     }
 
     [Fact]
-    public void CreateInMemory_ShouldCreateDatabase()
+    public void Constructor_ShouldCreateInMemoryDatabase()
     {
-        using var db = SqliteDocumentDatabase.CreateInMemory();
+        using var db = new SqliteDocumentDatabase("Data Source=:memory:");
 
         Assert.NotNull(db);
         Assert.Equal(":memory:", db.DatabaseName);
     }
 
     [Fact]
-    public void Create_ShouldCreateDatabaseWithFile()
+    public void Constructor_ShouldCreateDatabaseWithFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
         try
         {
-            using (var db = SqliteDocumentDatabase.Create(tempFile))
+            using (var db = new SqliteDocumentDatabase($"Data Source={tempFile}"))
             {
                 Assert.NotNull(db);
                 Assert.NotEqual(":memory:", db.DatabaseName);

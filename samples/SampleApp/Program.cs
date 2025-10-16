@@ -12,7 +12,7 @@ class Program
         Console.WriteLine("=== Codezerg.DocumentStore Sample Application ===\n");
 
         // Create or open a database
-        using var database = SqliteDocumentDatabase.Create("sample.db");
+        using var database = new SqliteDocumentDatabase("Data Source=sample.db");
 
         // Get a collection of User documents
         var users = database.GetCollection<User>("users");

@@ -57,6 +57,19 @@ The library follows an interface-based design pattern:
 - **IDocumentCollection&lt;T&gt;**: Collection interface providing CRUD operations, queries, and indexing
 - **IDocumentTransaction**: Transaction support for atomic operations across collections
 
+### Constructors
+
+SqliteDocumentDatabase provides two constructors:
+
+1. **String constructor**: `SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger = null)`
+   - Direct instantiation with a connection string
+   - Used for simple scenarios and testing
+
+2. **Options constructor**: `SqliteDocumentDatabase(IOptions<DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger = null)`
+   - Supports Microsoft.Extensions.Options pattern
+   - Used for dependency injection scenarios
+   - Internally delegates to the string constructor after extracting and validating the connection string
+
 ### Database Schema
 
 SQLite uses a **centralized schema** with four main tables:
@@ -152,10 +165,37 @@ users.CreateIndex(u => u.City)
 users.CreateIndex(u => u.Email, unique: true)
 ```
 
+### Dependency Injection
+
+The library supports Microsoft.Extensions.DependencyInjection via the `AddDocumentDatabase` extension method:
+
+```csharp
+// Register with connection string for file-based database
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=myapp.db"));
+
+// For in-memory databases
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=:memory:"));
+
+// Inject IDocumentDatabase into services
+public class UserService
+{
+    private readonly IDocumentDatabase _database;
+
+    public UserService(IDocumentDatabase database)
+    {
+        _database = database;
+    }
+}
+```
+
+The database is registered as a singleton and uses the `IOptions<DocumentDatabaseOptions>` constructor overload internally.
+
 ## Testing Guidelines
 
 Tests use xUnit and follow the pattern:
-- In-memory databases for test isolation (`SqliteDocumentDatabase.CreateInMemory()`)
+- In-memory databases for test isolation (`new SqliteDocumentDatabase("Data Source=:memory:")`)
 - Each test creates its own database instance
 - Tests cover CRUD operations, queries, transactions, and edge cases
 
