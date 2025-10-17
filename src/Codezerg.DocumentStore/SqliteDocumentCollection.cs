@@ -128,7 +128,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         if (string.IsNullOrEmpty(json))
             return null;
 
-        return DocumentSerializer.Deserialize<T>(json);
+        return DocumentSerializer.Deserialize<T>(json!);
     }
 
     public async Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
@@ -146,7 +146,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         if (string.IsNullOrEmpty(json))
             return null;
 
-        return DocumentSerializer.Deserialize<T>(json);
+        return DocumentSerializer.Deserialize<T>(json!);
     }
 
     public async Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)

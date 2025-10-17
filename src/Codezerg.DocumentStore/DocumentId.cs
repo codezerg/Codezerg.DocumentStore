@@ -80,7 +80,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// </summary>
     public static bool TryParse(string? hexString, out DocumentId id)
     {
-        if (string.IsNullOrEmpty(hexString) || hexString.Length != 24)
+        if (string.IsNullOrEmpty(hexString) || hexString!.Length != 24)
         {
             id = Empty;
             return false;
@@ -108,8 +108,10 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// </summary>
     public byte[] ToByteArray() => _value ?? Array.Empty<byte>();
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is DocumentId id && Equals(id);
 
+    /// <inheritdoc/>
     public bool Equals(DocumentId other)
     {
         if (_value == null && other._value == null) return true;
@@ -123,11 +125,13 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
         return true;
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return Compat.GetHashCodeForBytes(_value);
     }
 
+    /// <inheritdoc/>
     public int CompareTo(DocumentId other)
     {
         if (_value == null && other._value == null) return 0;
@@ -142,11 +146,34 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
         return _value.Length.CompareTo(other._value.Length);
     }
 
+    /// <summary>
+    /// Determines whether two DocumentId instances are equal.
+    /// </summary>
     public static bool operator ==(DocumentId left, DocumentId right) => left.Equals(right);
+
+    /// <summary>
+    /// Determines whether two DocumentId instances are not equal.
+    /// </summary>
     public static bool operator !=(DocumentId left, DocumentId right) => !left.Equals(right);
+
+    /// <summary>
+    /// Determines whether one DocumentId is less than another.
+    /// </summary>
     public static bool operator <(DocumentId left, DocumentId right) => left.CompareTo(right) < 0;
+
+    /// <summary>
+    /// Determines whether one DocumentId is greater than another.
+    /// </summary>
     public static bool operator >(DocumentId left, DocumentId right) => left.CompareTo(right) > 0;
+
+    /// <summary>
+    /// Determines whether one DocumentId is less than or equal to another.
+    /// </summary>
     public static bool operator <=(DocumentId left, DocumentId right) => left.CompareTo(right) <= 0;
+
+    /// <summary>
+    /// Determines whether one DocumentId is greater than or equal to another.
+    /// </summary>
     public static bool operator >=(DocumentId left, DocumentId right) => left.CompareTo(right) >= 0;
 
     private static byte[] Generate()
