@@ -58,49 +58,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
     public async Task InsertOneAsync(T document)
     {
-        if (document == null)
-            throw new ArgumentNullException(nameof(document));
-
-        var collectionId = await GetCollectionIdAsync();
-
-        var id = GetDocumentId(document);
-        // Check if ID is empty or default (ToString returns empty string for both)
-        if (id == DocumentId.Empty || string.IsNullOrEmpty(id.ToString()))
-        {
-            id = DocumentId.NewId();
-            SetDocumentId(document, id);
-        }
-
-        SetTimestamps(document, isNew: true);
-
-        var json = DocumentSerializer.Serialize(document);
-        var now = DateTime.UtcNow;
-
-        var dataParam = _useJsonB ? "jsonb(@Data)" : "@Data";
-        var sql = $@"
-            INSERT INTO documents (collection_id, document_id, data, created_at, updated_at, version)
-            VALUES (@CollectionId, @DocumentId, {dataParam}, @CreatedAt, @UpdatedAt, 1);";
-
-        try
-        {
-            using (var connection = _database.CreateConnection())
-            {
-                await connection.ExecuteAsync(sql, new
-                {
-                    CollectionId = collectionId,
-                    DocumentId = id.ToString(),
-                    Data = json,
-                    CreatedAt = now.ToString("O"),
-                    UpdatedAt = now.ToString("O")
-                });
-            }
-
-            _logger.LogDebug("Inserted document {Id} into {Collection}", id, _collectionName);
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // SQLITE_CONSTRAINT
-        {
-            throw new DuplicateKeyException(id, _collectionName);
-        }
+        await InsertManyAsync(new[] { document });
     }
 
     public async Task InsertManyAsync(IEnumerable<T> documents)
@@ -112,9 +70,72 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         if (documentList.Count == 0)
             return;
 
+        var collectionId = await GetCollectionIdAsync();
+
+        // Prepare all documents and parameters first
+        var insertParams = new List<(DocumentId id, object parameters)>();
+        var now = DateTime.UtcNow;
+
         foreach (var document in documentList)
         {
-            await InsertOneAsync(document);
+            if (document == null)
+                throw new ArgumentNullException(nameof(document));
+
+            var id = GetDocumentId(document);
+            // Check if ID is empty or default (ToString returns empty string for both)
+            if (id == DocumentId.Empty || string.IsNullOrEmpty(id.ToString()))
+            {
+                id = DocumentId.NewId();
+                SetDocumentId(document, id);
+            }
+
+            SetTimestamps(document, isNew: true);
+
+            var json = DocumentSerializer.Serialize(document);
+
+            insertParams.Add((id, new
+            {
+                CollectionId = collectionId,
+                DocumentId = id.ToString(),
+                Data = json,
+                CreatedAt = now.ToString("O"),
+                UpdatedAt = now.ToString("O")
+            }));
+        }
+
+        // Execute all inserts within a single connection and transaction
+        var dataParam = _useJsonB ? "jsonb(@Data)" : "@Data";
+        var sql = $@"
+            INSERT INTO documents (collection_id, document_id, data, created_at, updated_at, version)
+            VALUES (@CollectionId, @DocumentId, {dataParam}, @CreatedAt, @UpdatedAt, 1);";
+
+        using (var connection = _database.CreateConnection())
+        {
+            using (var transaction = connection.BeginTransaction())
+            {
+                try
+                {
+                    foreach (var (id, parameters) in insertParams)
+                    {
+                        await connection.ExecuteAsync(sql, parameters, transaction);
+                        _logger.LogDebug("Inserted document {Id} into {Collection}", id, _collectionName);
+                    }
+
+                    transaction.Commit();
+                }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // SQLITE_CONSTRAINT
+                {
+                    transaction.Rollback();
+                    // Try to determine which document caused the issue
+                    var failedId = insertParams.FirstOrDefault().id;
+                    throw new DuplicateKeyException(failedId, _collectionName);
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
         }
 
         _logger.LogDebug("Inserted {Count} documents into {Collection}", documentList.Count, _collectionName);
