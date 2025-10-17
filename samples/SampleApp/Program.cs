@@ -25,8 +25,8 @@ namespace SampleApp
             // using var database = new SqliteDocumentDatabase("Data Source=sample.db", useJsonB: false);
 
             // Get a collection of User documents
-            var users = database.GetCollection<User>("users");
-            var orders = database.GetCollection<Order>("orders");
+            var users = await database.GetCollectionAsync<User>("users");
+            var orders = await database.GetCollectionAsync<Order>("orders");
 
             // Clear existing data for demo
             await users.DeleteManyAsync(u => u.Age > 0);

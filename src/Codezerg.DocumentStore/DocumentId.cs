@@ -9,7 +9,7 @@ namespace Codezerg.DocumentStore;
 /// </summary>
 public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<DocumentId>
 {
-    private static int _counter = Compat.GetRandomInt32(0, 0xFFFFFF);
+    private static int _counter = Compatibility.GetRandomInt32(0, 0xFFFFFF);
     private readonly byte[] _value;
 
     /// <summary>
@@ -46,7 +46,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
         if (string.IsNullOrEmpty(hexString) || hexString.Length != 24)
             throw new ArgumentException("DocumentId hex string must be exactly 24 characters", nameof(hexString));
 
-        _value = Compat.FromHexString(hexString);
+        _value = Compatibility.FromHexString(hexString);
     }
 
     /// <summary>
@@ -101,7 +101,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// <summary>
     /// Converts the DocumentId to a hex string.
     /// </summary>
-    public override string ToString() => _value == null ? string.Empty : Compat.ToHexString(_value);
+    public override string ToString() => _value == null ? string.Empty : Compatibility.ToHexString(_value);
 
     /// <summary>
     /// Gets the byte array representation of this DocumentId.
@@ -128,7 +128,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        return Compat.GetHashCodeForBytes(_value);
+        return Compatibility.GetHashCodeForBytes(_value);
     }
 
     /// <inheritdoc/>
@@ -188,7 +188,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
         bytes[3] = (byte)timestamp;
 
         // Random value (5 bytes)
-        Compat.FillRandom(bytes, 4, 5);
+        Compatibility.FillRandom(bytes, 4, 5);
 
         // Counter (3 bytes)
         var counter = Interlocked.Increment(ref _counter) & 0xFFFFFF;

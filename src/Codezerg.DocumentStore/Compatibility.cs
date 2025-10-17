@@ -6,7 +6,7 @@ namespace Codezerg.DocumentStore;
 /// <summary>
 /// Compatibility helpers for netstandard2.0
 /// </summary>
-internal static class Compat
+internal static class Compatibility
 {
     private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
 
