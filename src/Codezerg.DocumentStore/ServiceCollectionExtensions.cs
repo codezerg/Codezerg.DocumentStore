@@ -1,8 +1,6 @@
 using Codezerg.DocumentStore.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System;
 
 namespace Codezerg.DocumentStore;

@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -7,7 +6,7 @@ namespace Codezerg.DocumentStore.Serialization;
 /// <summary>
 /// Provides JSON serialization for documents.
 /// </summary>
-public static class DocumentSerializer
+internal static class DocumentSerializer
 {
     private static readonly JsonSerializerOptions _defaultOptions;
 

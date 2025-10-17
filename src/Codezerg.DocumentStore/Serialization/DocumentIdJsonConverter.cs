@@ -7,7 +7,7 @@ namespace Codezerg.DocumentStore.Serialization;
 /// <summary>
 /// JSON converter for DocumentId type.
 /// </summary>
-public class DocumentIdJsonConverter : JsonConverter<DocumentId>
+internal class DocumentIdJsonConverter : JsonConverter<DocumentId>
 {
     public override DocumentId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

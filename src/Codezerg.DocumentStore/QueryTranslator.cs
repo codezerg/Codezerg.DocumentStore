@@ -9,7 +9,7 @@ namespace Codezerg.DocumentStore;
 /// <summary>
 /// Translates LINQ expressions to SQLite WHERE clauses with JSON operations.
 /// </summary>
-public class QueryTranslator
+internal class QueryTranslator
 {
     private readonly StringBuilder _whereClause = new();
     private readonly List<object?> _parameters = new();
