@@ -7,6 +7,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore;
 
@@ -95,13 +96,61 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         return (IDocumentCollection<T>)_collections.GetOrAdd(name, _ =>
         {
             var collection = new SqliteDocumentCollection<T>(this, name, _logger);
-            CreateCollection<T>(name);
+            CreateCollectionInternal<T>(name);
             return collection;
         });
     }
 
     /// <inheritdoc/>
-    public void CreateCollection<T>(string name) where T : class
+    public async Task CreateCollectionAsync<T>(string name) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Collection name cannot be null or empty.", nameof(name));
+
+        var now = DateTime.UtcNow.ToString("O");
+
+        // Insert into collections table if not exists
+        var insertSql = @"
+            INSERT OR IGNORE INTO collections (name, created_at)
+            VALUES (@Name, @CreatedAt);";
+
+        await _connection.ExecuteAsync(insertSql, new { Name = name, CreatedAt = now });
+
+        _logger.LogInformation("Created collection {CollectionName}", name);
+    }
+
+    /// <inheritdoc/>
+    public async Task DropCollectionAsync(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Collection name cannot be null or empty.", nameof(name));
+
+        // Delete from collections table (cascade will handle documents, indexes, and indexed_values)
+        var deleteSql = "DELETE FROM collections WHERE name = @Name;";
+        await _connection.ExecuteAsync(deleteSql, new { Name = name });
+
+        _collections.TryRemove(name, out _);
+
+        _logger.LogInformation("Dropped collection {CollectionName}", name);
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<string>> ListCollectionNamesAsync()
+    {
+        var sql = "SELECT name FROM collections ORDER BY name;";
+        var collectionNames = await _connection.QueryAsync<string>(sql);
+        return new List<string>(collectionNames);
+    }
+
+    /// <inheritdoc/>
+    public Task<IDocumentTransaction> BeginTransactionAsync()
+    {
+        var transaction = _connection.BeginTransaction();
+        _logger.LogDebug("Transaction started");
+        return Task.FromResult<IDocumentTransaction>(new SqliteDocumentTransaction(transaction));
+    }
+
+    private void CreateCollectionInternal<T>(string name) where T : class
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Collection name cannot be null or empty.", nameof(name));
@@ -116,37 +165,6 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         _connection.Execute(insertSql, new { Name = name, CreatedAt = now });
 
         _logger.LogInformation("Created collection {CollectionName}", name);
-    }
-
-    /// <inheritdoc/>
-    public void DropCollection(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Collection name cannot be null or empty.", nameof(name));
-
-        // Delete from collections table (cascade will handle documents, indexes, and indexed_values)
-        var deleteSql = "DELETE FROM collections WHERE name = @Name;";
-        _connection.Execute(deleteSql, new { Name = name });
-
-        _collections.TryRemove(name, out _);
-
-        _logger.LogInformation("Dropped collection {CollectionName}", name);
-    }
-
-    /// <inheritdoc/>
-    public List<string> ListCollectionNames()
-    {
-        var sql = "SELECT name FROM collections ORDER BY name;";
-        var collectionNames = _connection.Query<string>(sql);
-        return new List<string>(collectionNames);
-    }
-
-    /// <inheritdoc/>
-    public IDocumentTransaction BeginTransaction()
-    {
-        var transaction = _connection.BeginTransaction();
-        _logger.LogDebug("Transaction started");
-        return new SqliteDocumentTransaction(transaction);
     }
 
     /// <summary>

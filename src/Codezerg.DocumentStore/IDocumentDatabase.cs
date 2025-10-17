@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore;
 
@@ -21,25 +22,25 @@ public interface IDocumentDatabase : IDisposable
     /// </summary>
     /// <typeparam name="T">The document type.</typeparam>
     /// <param name="name">The collection name.</param>
-    void CreateCollection<T>(string name) where T : class;
+    Task CreateCollectionAsync<T>(string name) where T : class;
 
     /// <summary>
     /// Drops a collection from the database.
     /// </summary>
     /// <param name="name">The collection name.</param>
-    void DropCollection(string name);
+    Task DropCollectionAsync(string name);
 
     /// <summary>
     /// Lists all collection names in the database.
     /// </summary>
     /// <returns>A list of collection names.</returns>
-    List<string> ListCollectionNames();
+    Task<List<string>> ListCollectionNamesAsync();
 
     /// <summary>
     /// Begins a new transaction.
     /// </summary>
     /// <returns>A transaction instance.</returns>
-    IDocumentTransaction BeginTransaction();
+    Task<IDocumentTransaction> BeginTransactionAsync();
 
     /// <summary>
     /// Gets the database name.

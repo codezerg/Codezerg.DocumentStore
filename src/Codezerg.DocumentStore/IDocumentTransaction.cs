@@ -1,13 +1,14 @@
 ﻿using Microsoft.Data.Sqlite;
 using System;
 using System.Data;
+using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore;
 
 /// <summary>
 /// Represents a database transaction.
 /// </summary>
-public interface IDocumentTransaction : IDisposable
+public interface IDocumentTransaction : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Gets the underlying database transaction.
@@ -17,10 +18,10 @@ public interface IDocumentTransaction : IDisposable
     /// <summary>
     /// Commits the transaction.
     /// </summary>
-    void Commit();
+    Task CommitAsync();
 
     /// <summary>
     /// Rolls back the transaction.
     /// </summary>
-    void Rollback();
+    Task RollbackAsync();
 }

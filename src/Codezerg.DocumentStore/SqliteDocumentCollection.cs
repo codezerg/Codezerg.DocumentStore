@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore;
 
@@ -34,14 +35,14 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         _logger = logger ?? NullLogger.Instance;
     }
 
-    private long GetCollectionId(IDocumentTransaction? transaction = null)
+    private async Task<long> GetCollectionIdAsync(IDocumentTransaction? transaction = null)
     {
         if (_collectionId.HasValue)
             return _collectionId.Value;
 
         var connection = _database.GetConnection();
         var sql = "SELECT id FROM collections WHERE name = @Name LIMIT 1;";
-        var id = connection.QuerySingleOrDefault<long?>(sql, new { Name = _collectionName }, transaction?.DbTransaction);
+        var id = await connection.QuerySingleOrDefaultAsync<long?>(sql, new { Name = _collectionName }, transaction?.DbTransaction);
 
         if (!id.HasValue)
             throw new InvalidOperationException($"Collection '{_collectionName}' does not exist.");
@@ -50,12 +51,12 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return _collectionId.Value;
     }
 
-    public void InsertOne(T document, IDocumentTransaction? transaction = null)
+    public async Task InsertOneAsync(T document, IDocumentTransaction? transaction = null)
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
 
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
 
         var id = GetDocumentId(document);
         // Check if ID is empty or default (ToString returns empty string for both)
@@ -77,7 +78,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         try
         {
             var connection = _database.GetConnection();
-            connection.Execute(sql, new
+            await connection.ExecuteAsync(sql, new
             {
                 CollectionId = collectionId,
                 DocumentId = id.ToString(),
@@ -94,7 +95,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         }
     }
 
-    public void InsertMany(IEnumerable<T> documents, IDocumentTransaction? transaction = null)
+    public async Task InsertManyAsync(IEnumerable<T> documents, IDocumentTransaction? transaction = null)
     {
         if (documents == null)
             throw new ArgumentNullException(nameof(documents));
@@ -105,20 +106,20 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
         foreach (var document in documentList)
         {
-            InsertOne(document, transaction);
+            await InsertOneAsync(document, transaction);
         }
 
         _logger.LogDebug("Inserted {Count} documents into {Collection}", documentList.Count, _collectionName);
     }
 
-    public T? FindById(DocumentId id, IDocumentTransaction? transaction = null)
+    public async Task<T?> FindByIdAsync(DocumentId id, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
 
         var sql = "SELECT data FROM documents WHERE collection_id = @CollectionId AND document_id = @DocumentId LIMIT 1;";
 
         var connection = _database.GetConnection();
-        var json = connection.QuerySingleOrDefault<string>(sql, new
+        var json = await connection.QuerySingleOrDefaultAsync<string>(sql, new
         {
             CollectionId = collectionId,
             DocumentId = id.ToString()
@@ -130,9 +131,9 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return DocumentSerializer.Deserialize<T>(json);
     }
 
-    public T? FindOne(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
+    public async Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
         var (whereClause, parameters) = QueryTranslator.Translate(filter);
 
         var sql = $"SELECT data FROM documents WHERE collection_id = @CollectionId AND {whereClause} LIMIT 1;";
@@ -140,7 +141,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         var connection = _database.GetConnection();
         var dynamicParams = CreateDynamicParameters(parameters);
         dynamicParams.Add("CollectionId", collectionId);
-        var json = connection.QuerySingleOrDefault<string>(sql, dynamicParams, transaction?.DbTransaction);
+        var json = await connection.QuerySingleOrDefaultAsync<string>(sql, dynamicParams, transaction?.DbTransaction);
 
         if (string.IsNullOrEmpty(json))
             return null;
@@ -148,9 +149,9 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return DocumentSerializer.Deserialize<T>(json);
     }
 
-    public List<T> Find(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
+    public async Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
         var (whereClause, parameters) = QueryTranslator.Translate(filter);
 
         var sql = $"SELECT data FROM documents WHERE collection_id = @CollectionId AND {whereClause};";
@@ -158,7 +159,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         var connection = _database.GetConnection();
         var dynamicParams = CreateDynamicParameters(parameters);
         dynamicParams.Add("CollectionId", collectionId);
-        var jsonResults = connection.Query<string>(sql, dynamicParams, transaction?.DbTransaction);
+        var jsonResults = await connection.QueryAsync<string>(sql, dynamicParams, transaction?.DbTransaction);
 
         var results = new List<T>();
         foreach (var json in jsonResults)
@@ -171,14 +172,14 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return results;
     }
 
-    public List<T> FindAll(IDocumentTransaction? transaction = null)
+    public async Task<List<T>> FindAllAsync(IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
 
         var sql = "SELECT data FROM documents WHERE collection_id = @CollectionId;";
 
         var connection = _database.GetConnection();
-        var jsonResults = connection.Query<string>(sql, new { CollectionId = collectionId }, transaction: transaction?.DbTransaction);
+        var jsonResults = await connection.QueryAsync<string>(sql, new { CollectionId = collectionId }, transaction: transaction?.DbTransaction);
 
         var results = new List<T>();
         foreach (var json in jsonResults)
@@ -191,9 +192,9 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return results;
     }
 
-    public List<T> Find(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction = null)
+    public async Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
         var (whereClause, parameters) = QueryTranslator.Translate(filter);
 
         var sql = $"SELECT data FROM documents WHERE collection_id = @CollectionId AND {whereClause} LIMIT @Limit OFFSET @Skip;";
@@ -204,7 +205,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         dynamicParams.Add("Limit", limit);
         dynamicParams.Add("Skip", skip);
 
-        var jsonResults = connection.Query<string>(sql, dynamicParams, transaction?.DbTransaction);
+        var jsonResults = await connection.QueryAsync<string>(sql, dynamicParams, transaction?.DbTransaction);
 
         var results = new List<T>();
         foreach (var json in jsonResults)
@@ -217,9 +218,9 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return results;
     }
 
-    public long Count(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
+    public async Task<long> CountAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
         var (whereClause, parameters) = QueryTranslator.Translate(filter);
 
         var sql = $"SELECT COUNT(*) FROM documents WHERE collection_id = @CollectionId AND {whereClause};";
@@ -227,25 +228,25 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         var connection = _database.GetConnection();
         var dynamicParams = CreateDynamicParameters(parameters);
         dynamicParams.Add("CollectionId", collectionId);
-        return connection.ExecuteScalar<long>(sql, dynamicParams, transaction?.DbTransaction);
+        return await connection.ExecuteScalarAsync<long>(sql, dynamicParams, transaction?.DbTransaction);
     }
 
-    public long CountAll(IDocumentTransaction? transaction = null)
+    public async Task<long> CountAllAsync(IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
 
         var sql = "SELECT COUNT(*) FROM documents WHERE collection_id = @CollectionId;";
 
         var connection = _database.GetConnection();
-        return connection.ExecuteScalar<long>(sql, new { CollectionId = collectionId }, transaction: transaction?.DbTransaction);
+        return await connection.ExecuteScalarAsync<long>(sql, new { CollectionId = collectionId }, transaction: transaction?.DbTransaction);
     }
 
-    public bool UpdateById(DocumentId id, T document, IDocumentTransaction? transaction = null)
+    public async Task<bool> UpdateByIdAsync(DocumentId id, T document, IDocumentTransaction? transaction = null)
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
 
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
 
         SetDocumentId(document, id);
         SetTimestamps(document, isNew: false);
@@ -259,7 +260,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
             WHERE collection_id = @CollectionId AND document_id = @DocumentId;";
 
         var connection = _database.GetConnection();
-        var rowsAffected = connection.Execute(sql, new
+        var rowsAffected = await connection.ExecuteAsync(sql, new
         {
             CollectionId = collectionId,
             DocumentId = id.ToString(),
@@ -272,40 +273,40 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return rowsAffected > 0;
     }
 
-    public bool UpdateOne(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction = null)
+    public async Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction = null)
     {
-        var existing = FindOne(filter, transaction);
+        var existing = await FindOneAsync(filter, transaction);
         if (existing == null)
             return false;
 
         var id = GetDocumentId(existing);
-        return UpdateById(id, document, transaction);
+        return await UpdateByIdAsync(id, document, transaction);
     }
 
-    public long UpdateMany(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction = null)
+    public async Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction = null)
     {
-        var documents = Find(filter, transaction);
+        var documents = await FindAsync(filter, transaction);
         long updatedCount = 0;
 
         foreach (var doc in documents)
         {
             updateAction(doc);
             var id = GetDocumentId(doc);
-            if (UpdateById(id, doc, transaction))
+            if (await UpdateByIdAsync(id, doc, transaction))
                 updatedCount++;
         }
 
         return updatedCount;
     }
 
-    public bool DeleteById(DocumentId id, IDocumentTransaction? transaction = null)
+    public async Task<bool> DeleteByIdAsync(DocumentId id, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
 
         var sql = "DELETE FROM documents WHERE collection_id = @CollectionId AND document_id = @DocumentId;";
 
         var connection = _database.GetConnection();
-        var rowsAffected = connection.Execute(sql, new
+        var rowsAffected = await connection.ExecuteAsync(sql, new
         {
             CollectionId = collectionId,
             DocumentId = id.ToString()
@@ -316,19 +317,19 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         return rowsAffected > 0;
     }
 
-    public bool DeleteOne(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
+    public async Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
     {
-        var doc = FindOne(filter, transaction);
+        var doc = await FindOneAsync(filter, transaction);
         if (doc == null)
             return false;
 
         var id = GetDocumentId(doc);
-        return DeleteById(id, transaction);
+        return await DeleteByIdAsync(id, transaction);
     }
 
-    public long DeleteMany(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
+    public async Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
     {
-        var collectionId = GetCollectionId(transaction);
+        var collectionId = await GetCollectionIdAsync(transaction);
         var (whereClause, parameters) = QueryTranslator.Translate(filter);
 
         var sql = $"DELETE FROM documents WHERE collection_id = @CollectionId AND {whereClause};";
@@ -336,22 +337,22 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         var connection = _database.GetConnection();
         var dynamicParams = CreateDynamicParameters(parameters);
         dynamicParams.Add("CollectionId", collectionId);
-        var rowsAffected = connection.Execute(sql, dynamicParams, transaction?.DbTransaction);
+        var rowsAffected = await connection.ExecuteAsync(sql, dynamicParams, transaction?.DbTransaction);
 
         _logger.LogDebug("Deleted {Count} documents from {Collection}", rowsAffected, _collectionName);
 
         return rowsAffected;
     }
 
-    public bool Any(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
+    public async Task<bool> AnyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)
     {
-        var count = Count(filter, transaction);
+        var count = await CountAsync(filter, transaction);
         return count > 0;
     }
 
-    public void CreateIndex<TField>(Expression<Func<T, TField>> fieldExpression, bool unique = false)
+    public async Task CreateIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression, bool unique = false)
     {
-        var collectionId = GetCollectionId();
+        var collectionId = await GetCollectionIdAsync();
         var fieldName = GetFieldName(fieldExpression);
         var indexName = $"idx_{_collectionName}_{fieldName}";
         var uniqueKeyword = unique ? "UNIQUE" : "";
@@ -363,7 +364,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
             INSERT OR IGNORE INTO indexes (collection_id, name, fields, unique_index, sparse)
             VALUES (@CollectionId, @Name, @Fields, @Unique, 0);";
 
-        connection.Execute(insertIndexSql, new
+        await connection.ExecuteAsync(insertIndexSql, new
         {
             CollectionId = collectionId,
             Name = indexName,
@@ -377,14 +378,14 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
             ON documents (json_extract(data, '$.{fieldName}'))
             WHERE collection_id = {collectionId};";
 
-        connection.Execute(createIndexSql);
+        await connection.ExecuteAsync(createIndexSql);
 
         _logger.LogInformation("Created index {IndexName} on {Collection}", indexName, _collectionName);
     }
 
-    public void DropIndex<TField>(Expression<Func<T, TField>> fieldExpression)
+    public async Task DropIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression)
     {
-        var collectionId = GetCollectionId();
+        var collectionId = await GetCollectionIdAsync();
         var fieldName = GetFieldName(fieldExpression);
         var indexName = $"idx_{_collectionName}_{fieldName}";
 
@@ -392,14 +393,14 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
         // Drop the actual SQLite index
         var dropIndexSql = $"DROP INDEX IF EXISTS {indexName};";
-        connection.Execute(dropIndexSql);
+        await connection.ExecuteAsync(dropIndexSql);
 
         // Delete from indexes metadata table
         var deleteIndexSql = @"
             DELETE FROM indexes
             WHERE collection_id = @CollectionId AND name = @Name;";
 
-        connection.Execute(deleteIndexSql, new
+        await connection.ExecuteAsync(deleteIndexSql, new
         {
             CollectionId = collectionId,
             Name = indexName

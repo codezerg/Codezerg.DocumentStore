@@ -1,13 +1,14 @@
 using Microsoft.Data.Sqlite;
 using System;
 using System.Data;
+using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore;
 
 /// <summary>
 /// Represents a database transaction.
 /// </summary>
-internal class SqliteDocumentTransaction : IDocumentTransaction
+internal class SqliteDocumentTransaction : IDocumentTransaction, IAsyncDisposable
 {
     private readonly SqliteTransaction _transaction;
     private bool _disposed;
@@ -22,7 +23,7 @@ internal class SqliteDocumentTransaction : IDocumentTransaction
         _transaction = transaction ?? throw new ArgumentNullException(nameof(transaction));
     }
 
-    public void Commit()
+    public Task CommitAsync()
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(SqliteDocumentTransaction));
@@ -32,9 +33,10 @@ internal class SqliteDocumentTransaction : IDocumentTransaction
 
         _transaction.Commit();
         _completed = true;
+        return Task.CompletedTask;
     }
 
-    public void Rollback()
+    public Task RollbackAsync()
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(SqliteDocumentTransaction));
@@ -44,6 +46,7 @@ internal class SqliteDocumentTransaction : IDocumentTransaction
 
         _transaction.Rollback();
         _completed = true;
+        return Task.CompletedTask;
     }
 
     public void Dispose()
@@ -65,5 +68,11 @@ internal class SqliteDocumentTransaction : IDocumentTransaction
 
         _transaction.Dispose();
         _disposed = true;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return default;
     }
 }

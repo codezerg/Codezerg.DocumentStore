@@ -7,7 +7,7 @@ namespace SampleApp;
 /// </summary>
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         Console.WriteLine("=== Codezerg.DocumentStore Sample Application ===\n");
 
@@ -19,43 +19,43 @@ class Program
         var orders = database.GetCollection<Order>("orders");
 
         // Clear existing data for demo
-        users.DeleteMany(u => u.Age > 0);
-        orders.DeleteMany(o => o.Total > 0);
+        await users.DeleteManyAsync(u => u.Age > 0);
+        await orders.DeleteManyAsync(o => o.Total > 0);
 
         Console.WriteLine("1. Basic CRUD Operations");
         Console.WriteLine("========================\n");
 
-        DemoBasicCrud(users);
+        await DemoBasicCrudAsync(users);
 
         Console.WriteLine("\n2. Query Operations");
         Console.WriteLine("===================\n");
 
-        DemoQueries(users);
+        await DemoQueriesAsync(users);
 
         Console.WriteLine("\n3. Update Operations");
         Console.WriteLine("====================\n");
 
-        DemoUpdates(users);
+        await DemoUpdatesAsync(users);
 
         Console.WriteLine("\n4. Transaction Support");
         Console.WriteLine("======================\n");
 
-        DemoTransactions(database, users, orders);
+        await DemoTransactionsAsync(database, users, orders);
 
         Console.WriteLine("\n5. Index Management");
         Console.WriteLine("===================\n");
 
-        DemoIndexes(users);
+        await DemoIndexesAsync(users);
 
         Console.WriteLine("\n6. Complex Queries");
         Console.WriteLine("==================\n");
 
-        DemoComplexQueries(users);
+        await DemoComplexQueriesAsync(users);
 
         Console.WriteLine("\n=== Sample Application Complete ===");
     }
 
-    static void DemoBasicCrud(IDocumentCollection<User> users)
+    static async Task DemoBasicCrudAsync(IDocumentCollection<User> users)
     {
         // Insert a single document
         var user1 = new User
@@ -67,7 +67,7 @@ class Program
             Tags = new List<string> { "developer", "team-lead" }
         };
 
-        users.InsertOne(user1);
+        await users.InsertOneAsync(user1);
         Console.WriteLine($"✓ Inserted user: {user1.Name} (ID: {user1.Id})");
 
         // Insert multiple documents
@@ -79,26 +79,26 @@ class Program
             new User { Name = "Eve Davis", Email = "eve@example.com", Age = 31, City = "New York", Tags = new List<string> { "designer", "ux" } }
         };
 
-        users.InsertMany(newUsers);
+        await users.InsertManyAsync(newUsers);
         Console.WriteLine($"✓ Inserted {newUsers.Length} users");
 
         // Count documents
-        var totalUsers = users.CountAll();
+        var totalUsers = await users.CountAllAsync();
         Console.WriteLine($"✓ Total users in collection: {totalUsers}");
 
         // Find by ID
-        var foundUser = users.FindById(user1.Id);
+        var foundUser = await users.FindByIdAsync(user1.Id);
         Console.WriteLine($"✓ Found user by ID: {foundUser?.Name}");
     }
 
-    static void DemoQueries(IDocumentCollection<User> users)
+    static async Task DemoQueriesAsync(IDocumentCollection<User> users)
     {
         // Find all users
-        var allUsers = users.FindAll();
+        var allUsers = await users.FindAllAsync();
         Console.WriteLine($"✓ Found {allUsers.Count} total users");
 
         // Find users by age
-        var youngUsers = users.Find(u => u.Age < 30);
+        var youngUsers = await users.FindAsync(u => u.Age < 30);
         Console.WriteLine($"✓ Found {youngUsers.Count} users under 30:");
         foreach (var user in youngUsers)
         {
@@ -106,26 +106,26 @@ class Program
         }
 
         // Find users by city
-        var nyUsers = users.Find(u => u.City == "New York");
+        var nyUsers = await users.FindAsync(u => u.City == "New York");
         Console.WriteLine($"✓ Found {nyUsers.Count} users in New York");
 
         // Find one user
-        var developer = users.FindOne(u => u.Name == "Bob Smith");
+        var developer = await users.FindOneAsync(u => u.Name == "Bob Smith");
         Console.WriteLine($"✓ Found developer: {developer?.Name}, Email: {developer?.Email}");
 
         // Count with filter
-        var developerCount = users.Count(u => u.Age > 30);
+        var developerCount = await users.CountAsync(u => u.Age > 30);
         Console.WriteLine($"✓ Users over 30: {developerCount}");
 
         // Check if any user exists
-        var hasManagers = users.Any(u => u.Age > 40);
+        var hasManagers = await users.AnyAsync(u => u.Age > 40);
         Console.WriteLine($"✓ Has users over 40: {hasManagers}");
     }
 
-    static void DemoUpdates(IDocumentCollection<User> users)
+    static async Task DemoUpdatesAsync(IDocumentCollection<User> users)
     {
         // Find a user to update
-        var user = users.FindOne(u => u.Name == "Alice Johnson");
+        var user = await users.FindOneAsync(u => u.Name == "Alice Johnson");
 
         if (user != null)
         {
@@ -133,38 +133,38 @@ class Program
             user.Age = 29;
             user.City = "Boston";
 
-            var updated = users.UpdateById(user.Id, user);
+            var updated = await users.UpdateByIdAsync(user.Id, user);
             Console.WriteLine($"✓ Updated user {user.Name}: Age={user.Age}, City={user.City}");
         }
 
         // Update multiple users
-        var updateCount = users.UpdateMany(
+        var updateCount = await users.UpdateManyAsync(
             u => u.Age < 30,
             user => user.Tags?.Add("young-professional")
         );
         Console.WriteLine($"✓ Updated {updateCount} young users with 'young-professional' tag");
 
         // Delete a user
-        var toDelete = users.FindOne(u => u.Name == "David Brown");
+        var toDelete = await users.FindOneAsync(u => u.Name == "David Brown");
         if (toDelete != null)
         {
-            users.DeleteById(toDelete.Id);
+            await users.DeleteByIdAsync(toDelete.Id);
             Console.WriteLine($"✓ Deleted user: {toDelete.Name}");
         }
 
         // Delete multiple users
-        var deleteCount = users.DeleteMany(u => u.Age > 50);
+        var deleteCount = await users.DeleteManyAsync(u => u.Age > 50);
         Console.WriteLine($"✓ Deleted {deleteCount} users over 50");
     }
 
-    static void DemoTransactions(
+    static async Task DemoTransactionsAsync(
         IDocumentDatabase database,
         IDocumentCollection<User> users,
         IDocumentCollection<Order> orders)
     {
         Console.WriteLine("Creating user and order in transaction...");
 
-        using var transaction = database.BeginTransaction();
+        await using var transaction = await database.BeginTransactionAsync();
 
         try
         {
@@ -178,7 +178,7 @@ class Program
                 Tags = new List<string> { "customer" }
             };
 
-            users.InsertOne(newUser, transaction);
+            await users.InsertOneAsync(newUser, transaction);
 
             // Create an order for that user
             var order = new Order
@@ -189,22 +189,22 @@ class Program
                 Items = new List<string> { "Laptop", "Mouse", "Keyboard" }
             };
 
-            orders.InsertOne(order, transaction);
+            await orders.InsertOneAsync(order, transaction);
 
             // Commit the transaction
-            transaction.Commit();
+            await transaction.CommitAsync();
             Console.WriteLine($"✓ Transaction committed: User '{newUser.Name}' and Order '{order.OrderNumber}'");
         }
         catch (Exception ex)
         {
-            transaction.Rollback();
+            await transaction.RollbackAsync();
             Console.WriteLine($"✗ Transaction rolled back: {ex.Message}");
         }
 
         // Demonstrate rollback
         Console.WriteLine("\nDemonstrating transaction rollback...");
 
-        using (var tx = database.BeginTransaction())
+        await using (var tx = await database.BeginTransactionAsync())
         {
             var testUser = new User
             {
@@ -214,35 +214,35 @@ class Program
                 City = "Test City"
             };
 
-            users.InsertOne(testUser, tx);
+            await users.InsertOneAsync(testUser, tx);
             Console.WriteLine("✓ User inserted in transaction");
 
             // Transaction disposed without commit = automatic rollback
         }
 
-        var rolledBackUser = users.FindOne(u => u.Name == "Test User");
+        var rolledBackUser = await users.FindOneAsync(u => u.Name == "Test User");
         Console.WriteLine($"✓ User after rollback: {(rolledBackUser == null ? "Not found (rolled back)" : "Found (ERROR)")}");
     }
 
-    static void DemoIndexes(IDocumentCollection<User> users)
+    static async Task DemoIndexesAsync(IDocumentCollection<User> users)
     {
         // Create an index on Email field
-        users.CreateIndex(u => u.Email, unique: true);
+        await users.CreateIndexAsync(u => u.Email, unique: true);
         Console.WriteLine("✓ Created unique index on Email field");
 
         // Create an index on City field
-        users.CreateIndex(u => u.City);
+        await users.CreateIndexAsync(u => u.City);
         Console.WriteLine("✓ Created index on City field");
 
         // Queries using indexes will be faster
-        var usersInNY = users.Find(u => u.City == "New York");
+        var usersInNY = await users.FindAsync(u => u.City == "New York");
         Console.WriteLine($"✓ Query with index found {usersInNY.Count} users");
     }
 
-    static void DemoComplexQueries(IDocumentCollection<User> users)
+    static async Task DemoComplexQueriesAsync(IDocumentCollection<User> users)
     {
         // Add more test data
-        users.InsertMany(new[]
+        await users.InsertManyAsync(new[]
         {
             new User { Name = "Grace Lee", Email = "grace@example.com", Age = 26, City = "Los Angeles", Tags = new List<string> { "developer", "frontend" } },
             new User { Name = "Henry Zhang", Email = "henry@example.com", Age = 38, City = "San Francisco", Tags = new List<string> { "developer", "backend" } },
@@ -250,23 +250,23 @@ class Program
         });
 
         // Complex query with multiple conditions
-        var experiencedDevs = users.Find(u =>
+        var experiencedDevs = await users.FindAsync(u =>
             u.Age >= 30 && u.City == "San Francisco");
         Console.WriteLine($"✓ Experienced developers in SF: {experiencedDevs.Count}");
 
         // String contains query
-        var emailContains = users.Find(u => u.Email!.Contains("example.com"));
+        var emailContains = await users.FindAsync(u => u.Email!.Contains("example.com"));
         Console.WriteLine($"✓ Users with 'example.com' email: {emailContains.Count}");
 
         // Pagination
-        var page1 = users.Find(u => u.Age > 0, skip: 0, limit: 3);
+        var page1 = await users.FindAsync(u => u.Age > 0, skip: 0, limit: 3);
         Console.WriteLine($"✓ Page 1 (first 3 users): {string.Join(", ", page1.Select(u => u.Name))}");
 
-        var page2 = users.Find(u => u.Age > 0, skip: 3, limit: 3);
+        var page2 = await users.FindAsync(u => u.Age > 0, skip: 3, limit: 3);
         Console.WriteLine($"✓ Page 2 (next 3 users): {string.Join(", ", page2.Select(u => u.Name))}");
 
         // Get all developers
-        var allDevs = users.FindAll();
+        var allDevs = await users.FindAllAsync();
         Console.WriteLine($"\n✓ All users in database: {allDevs.Count}");
         foreach (var user in allDevs.OrderBy(u => u.Name))
         {

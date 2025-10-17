@@ -68,35 +68,35 @@ public class SqliteDocumentDatabaseTests : IDisposable
     }
 
     [Fact]
-    public void CreateCollection_ShouldCreateCollection()
+    public async Task CreateCollection_ShouldCreateCollection()
     {
-        _database.CreateCollection<TestDocument>("newCollection");
+        await _database.CreateCollectionAsync<TestDocument>("newCollection");
 
-        var collections = _database.ListCollectionNames();
+        var collections = await _database.ListCollectionNamesAsync();
         Assert.Contains("newCollection", collections);
     }
 
     [Fact]
-    public void DropCollection_ShouldRemoveCollection()
+    public async Task DropCollection_ShouldRemoveCollection()
     {
-        _database.CreateCollection<TestDocument>("toDelete");
-        var beforeDrop = _database.ListCollectionNames();
+        await _database.CreateCollectionAsync<TestDocument>("toDelete");
+        var beforeDrop = await _database.ListCollectionNamesAsync();
         Assert.Contains("toDelete", beforeDrop);
 
-        _database.DropCollection("toDelete");
+        await _database.DropCollectionAsync("toDelete");
 
-        var afterDrop = _database.ListCollectionNames();
+        var afterDrop = await _database.ListCollectionNamesAsync();
         Assert.DoesNotContain("toDelete", afterDrop);
     }
 
     [Fact]
-    public void ListCollectionNames_ShouldReturnAllCollections()
+    public async Task ListCollectionNames_ShouldReturnAllCollections()
     {
-        _database.CreateCollection<TestDocument>("collection1");
-        _database.CreateCollection<TestDocument>("collection2");
-        _database.CreateCollection<TestDocument>("collection3");
+        await _database.CreateCollectionAsync<TestDocument>("collection1");
+        await _database.CreateCollectionAsync<TestDocument>("collection2");
+        await _database.CreateCollectionAsync<TestDocument>("collection3");
 
-        var collections = _database.ListCollectionNames();
+        var collections = await _database.ListCollectionNamesAsync();
 
         Assert.Contains("collection1", collections);
         Assert.Contains("collection2", collections);
@@ -104,18 +104,18 @@ public class SqliteDocumentDatabaseTests : IDisposable
     }
 
     [Fact]
-    public void ListCollectionNames_ShouldReturnEmptyListWhenNoCollections()
+    public async Task ListCollectionNames_ShouldReturnEmptyListWhenNoCollections()
     {
-        var collections = _database.ListCollectionNames();
+        var collections = await _database.ListCollectionNamesAsync();
 
         Assert.NotNull(collections);
         Assert.Empty(collections);
     }
 
     [Fact]
-    public void BeginTransaction_ShouldReturnTransaction()
+    public async Task BeginTransaction_ShouldReturnTransaction()
     {
-        using var transaction = _database.BeginTransaction();
+        using var transaction = await _database.BeginTransactionAsync();
 
         Assert.NotNull(transaction);
         Assert.NotNull(transaction.DbTransaction);

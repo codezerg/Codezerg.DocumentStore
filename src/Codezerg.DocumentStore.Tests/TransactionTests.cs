@@ -19,206 +19,206 @@ public class TransactionTests : IDisposable
     }
 
     [Fact]
-    public void Transaction_Commit_ShouldPersistChanges()
+    public async Task Transaction_Commit_ShouldPersistChanges()
     {
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
             var doc = new TestDocument { Name = "Test" };
-            _collection.InsertOne(doc, transaction);
+            await _collection.InsertOneAsync(doc, transaction);
 
-            transaction.Commit();
+            await transaction.CommitAsync();
         }
 
-        var count = _collection.CountAll();
+        var count = await _collection.CountAllAsync();
         Assert.Equal(1, count);
     }
 
     [Fact]
-    public void Transaction_Rollback_ShouldNotPersistChanges()
+    public async Task Transaction_Rollback_ShouldNotPersistChanges()
     {
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
             var doc = new TestDocument { Name = "Test" };
-            _collection.InsertOne(doc, transaction);
+            await _collection.InsertOneAsync(doc, transaction);
 
-            transaction.Rollback();
+            await transaction.RollbackAsync();
         }
 
-        var count = _collection.CountAll();
+        var count = await _collection.CountAllAsync();
         Assert.Equal(0, count);
     }
 
     [Fact]
-    public void Transaction_DisposeWithoutCommit_ShouldRollback()
+    public async Task Transaction_DisposeWithoutCommit_ShouldRollback()
     {
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
             var doc = new TestDocument { Name = "Test" };
-            _collection.InsertOne(doc, transaction);
+            await _collection.InsertOneAsync(doc, transaction);
 
             // Dispose without commit = automatic rollback
         }
 
-        var count = _collection.CountAll();
+        var count = await _collection.CountAllAsync();
         Assert.Equal(0, count);
     }
 
     [Fact]
-    public void Transaction_MultipleOperations_ShouldBeAtomic()
+    public async Task Transaction_MultipleOperations_ShouldBeAtomic()
     {
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
-            _collection.InsertOne(new TestDocument { Name = "Doc1" }, transaction);
-            _collection.InsertOne(new TestDocument { Name = "Doc2" }, transaction);
-            _collection.InsertOne(new TestDocument { Name = "Doc3" }, transaction);
+            await _collection.InsertOneAsync(new TestDocument { Name = "Doc1" }, transaction);
+            await _collection.InsertOneAsync(new TestDocument { Name = "Doc2" }, transaction);
+            await _collection.InsertOneAsync(new TestDocument { Name = "Doc3" }, transaction);
 
-            transaction.Commit();
+            await transaction.CommitAsync();
         }
 
-        var count = _collection.CountAll();
+        var count = await _collection.CountAllAsync();
         Assert.Equal(3, count);
     }
 
     [Fact]
-    public void Transaction_RollbackMultipleOperations_ShouldRevertAll()
+    public async Task Transaction_RollbackMultipleOperations_ShouldRevertAll()
     {
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
-            _collection.InsertOne(new TestDocument { Name = "Doc1" }, transaction);
-            _collection.InsertOne(new TestDocument { Name = "Doc2" }, transaction);
-            _collection.InsertOne(new TestDocument { Name = "Doc3" }, transaction);
+            await _collection.InsertOneAsync(new TestDocument { Name = "Doc1" }, transaction);
+            await _collection.InsertOneAsync(new TestDocument { Name = "Doc2" }, transaction);
+            await _collection.InsertOneAsync(new TestDocument { Name = "Doc3" }, transaction);
 
-            transaction.Rollback();
+            await transaction.RollbackAsync();
         }
 
-        var count = _collection.CountAll();
+        var count = await _collection.CountAllAsync();
         Assert.Equal(0, count);
     }
 
     [Fact]
-    public void Transaction_Query_ShouldSeeUncommittedChanges()
+    public async Task Transaction_Query_ShouldSeeUncommittedChanges()
     {
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
             var doc = new TestDocument { Name = "Test" };
-            _collection.InsertOne(doc, transaction);
+            await _collection.InsertOneAsync(doc, transaction);
 
             // Should see the document within the transaction
-            var found = _collection.FindById(doc.Id, transaction);
+            var found = await _collection.FindByIdAsync(doc.Id, transaction);
             Assert.NotNull(found);
             Assert.Equal("Test", found.Name);
 
-            transaction.Rollback();
+            await transaction.RollbackAsync();
         }
     }
 
     [Fact]
-    public void Transaction_Update_ShouldWorkInTransaction()
+    public async Task Transaction_Update_ShouldWorkInTransaction()
     {
         var doc = new TestDocument { Name = "Original" };
-        _collection.InsertOne(doc);
+        await _collection.InsertOneAsync(doc);
 
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
             doc.Name = "Updated";
-            _collection.UpdateById(doc.Id, doc, transaction);
+            await _collection.UpdateByIdAsync(doc.Id, doc, transaction);
 
-            transaction.Commit();
+            await transaction.CommitAsync();
         }
 
-        var found = _collection.FindById(doc.Id);
+        var found = await _collection.FindByIdAsync(doc.Id);
         Assert.NotNull(found);
         Assert.Equal("Updated", found.Name);
     }
 
     [Fact]
-    public void Transaction_Delete_ShouldWorkInTransaction()
+    public async Task Transaction_Delete_ShouldWorkInTransaction()
     {
         var doc = new TestDocument { Name = "ToDelete" };
-        _collection.InsertOne(doc);
+        await _collection.InsertOneAsync(doc);
 
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
-            _collection.DeleteById(doc.Id, transaction);
-            transaction.Commit();
+            await _collection.DeleteByIdAsync(doc.Id, transaction);
+            await transaction.CommitAsync();
         }
 
-        var found = _collection.FindById(doc.Id);
+        var found = await _collection.FindByIdAsync(doc.Id);
         Assert.Null(found);
     }
 
     [Fact]
-    public void Transaction_DoubleCommit_ShouldThrow()
+    public async Task Transaction_DoubleCommit_ShouldThrow()
     {
-        using var transaction = _database.BeginTransaction();
+        await using var transaction = await _database.BeginTransactionAsync();
 
-        transaction.Commit();
+        await transaction.CommitAsync();
 
-        Assert.Throws<InvalidOperationException>(() => transaction.Commit());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await transaction.CommitAsync());
     }
 
     [Fact]
-    public void Transaction_DoubleRollback_ShouldThrow()
+    public async Task Transaction_DoubleRollback_ShouldThrow()
     {
-        using var transaction = _database.BeginTransaction();
+        await using var transaction = await _database.BeginTransactionAsync();
 
-        transaction.Rollback();
+        await transaction.RollbackAsync();
 
-        Assert.Throws<InvalidOperationException>(() => transaction.Rollback());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await transaction.RollbackAsync());
     }
 
     [Fact]
-    public void Transaction_CommitAfterRollback_ShouldThrow()
+    public async Task Transaction_CommitAfterRollback_ShouldThrow()
     {
-        using var transaction = _database.BeginTransaction();
+        await using var transaction = await _database.BeginTransactionAsync();
 
-        transaction.Rollback();
+        await transaction.RollbackAsync();
 
-        Assert.Throws<InvalidOperationException>(() => transaction.Commit());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await transaction.CommitAsync());
     }
 
     [Fact]
-    public void Transaction_DbTransaction_ShouldNotBeNull()
+    public async Task Transaction_DbTransaction_ShouldNotBeNull()
     {
-        using var transaction = _database.BeginTransaction();
+        await using var transaction = await _database.BeginTransactionAsync();
 
         Assert.NotNull(transaction.DbTransaction);
     }
 
     [Fact]
-    public void Transaction_MultipleCollections_ShouldWorkTogether()
+    public async Task Transaction_MultipleCollections_ShouldWorkTogether()
     {
         var collection1 = _database.GetCollection<TestDocument>("col1");
         var collection2 = _database.GetCollection<TestDocument>("col2");
 
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
-            collection1.InsertOne(new TestDocument { Name = "Doc1" }, transaction);
-            collection2.InsertOne(new TestDocument { Name = "Doc2" }, transaction);
+            await collection1.InsertOneAsync(new TestDocument { Name = "Doc1" }, transaction);
+            await collection2.InsertOneAsync(new TestDocument { Name = "Doc2" }, transaction);
 
-            transaction.Commit();
+            await transaction.CommitAsync();
         }
 
-        Assert.Equal(1, collection1.CountAll());
-        Assert.Equal(1, collection2.CountAll());
+        Assert.Equal(1, await collection1.CountAllAsync());
+        Assert.Equal(1, await collection2.CountAllAsync());
     }
 
     [Fact]
-    public void Transaction_MultipleCollectionsRollback_ShouldRevertAll()
+    public async Task Transaction_MultipleCollectionsRollback_ShouldRevertAll()
     {
         var collection1 = _database.GetCollection<TestDocument>("col1");
         var collection2 = _database.GetCollection<TestDocument>("col2");
 
-        using (var transaction = _database.BeginTransaction())
+        await using (var transaction = await _database.BeginTransactionAsync())
         {
-            collection1.InsertOne(new TestDocument { Name = "Doc1" }, transaction);
-            collection2.InsertOne(new TestDocument { Name = "Doc2" }, transaction);
+            await collection1.InsertOneAsync(new TestDocument { Name = "Doc1" }, transaction);
+            await collection2.InsertOneAsync(new TestDocument { Name = "Doc2" }, transaction);
 
-            transaction.Rollback();
+            await transaction.RollbackAsync();
         }
 
-        Assert.Equal(0, collection1.CountAll());
-        Assert.Equal(0, collection2.CountAll());
+        Assert.Equal(0, await collection1.CountAllAsync());
+        Assert.Equal(0, await collection2.CountAllAsync());
     }
 
     private class TestDocument
