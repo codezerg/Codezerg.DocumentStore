@@ -72,11 +72,57 @@ dotnet pack -c Release
 
 ### Core Interfaces
 
-The library follows an interface-based design pattern:
+The library follows an interface-based design pattern with fully async APIs:
 
-- **IDocumentDatabase**: Main entry point for database operations (create/drop collections, transactions)
-- **IDocumentCollection&lt;T&gt;**: Collection interface providing CRUD operations, queries, and indexing
-- **IDocumentTransaction**: Transaction support for atomic operations across collections
+#### IDocumentDatabase
+Main entry point for database operations. Key methods:
+- `IDocumentCollection<T> GetCollection<T>(string name)` - Get or create a collection
+- `Task CreateCollectionAsync<T>(string name)` - Explicitly create a collection
+- `Task DropCollectionAsync(string name)` - Remove a collection and all its documents
+- `Task<List<string>> ListCollectionNamesAsync()` - List all collections
+- `Task<IDocumentTransaction> BeginTransactionAsync()` - Start a new transaction
+- `string DatabaseName { get; }` - Get the database name
+- `string ConnectionString { get; }` - Get the connection string
+
+#### IDocumentCollection&lt;T&gt;
+Type-safe collection operations. All methods support optional transactions:
+
+**Insert Operations:**
+- `Task InsertOneAsync(T document, IDocumentTransaction? transaction = null)` - Insert a single document
+- `Task InsertManyAsync(IEnumerable<T> documents, IDocumentTransaction? transaction = null)` - Insert multiple documents
+
+**Query Operations:**
+- `Task<T?> FindByIdAsync(DocumentId id, IDocumentTransaction? transaction = null)` - Find by ID
+- `Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Find first matching document
+- `Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Find all matching documents
+- `Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction = null)` - Find with pagination
+- `Task<List<T>> FindAllAsync(IDocumentTransaction? transaction = null)` - Find all documents
+- `Task<long> CountAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Count matching documents
+- `Task<long> CountAllAsync(IDocumentTransaction? transaction = null)` - Count all documents
+- `Task<bool> AnyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Check if any match
+
+**Update Operations:**
+- `Task<bool> UpdateByIdAsync(DocumentId id, T document, IDocumentTransaction? transaction = null)` - Update by ID
+- `Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction = null)` - Update first match
+- `Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction = null)` - Update multiple documents
+
+**Delete Operations:**
+- `Task<bool> DeleteByIdAsync(DocumentId id, IDocumentTransaction? transaction = null)` - Delete by ID
+- `Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Delete first match
+- `Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Delete all matching
+
+**Index Operations:**
+- `Task CreateIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression, bool unique = false)` - Create an index
+- `Task DropIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression)` - Drop an index
+
+**Properties:**
+- `string CollectionName { get; }` - Get the collection name
+
+#### IDocumentTransaction
+Transaction support for atomic operations. Implements `IDisposable` and `IAsyncDisposable`:
+- `Task CommitAsync()` - Commit the transaction
+- `Task RollbackAsync()` - Rollback the transaction
+- `IDbTransaction DbTransaction { get; }` - Access underlying database transaction
 
 ### Constructors
 

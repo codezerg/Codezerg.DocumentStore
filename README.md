@@ -62,49 +62,49 @@ var user = new User
     }
 };
 
-users.Insert(user);  // Id is auto-assigned
+await users.InsertOneAsync(user);  // Id is auto-assigned
 ```
 
 ### 4. Query documents
 
 ```csharp
-var user = users.FindById(userId);
-var adults = users.Find(u => u.Age >= 18);
-var seattleUsers = users.Find(u => u.Address.City == "Seattle");
-var gmailUsers = users.Find(u => u.Email.Contains("@gmail.com"));
-var results = users.Find(u => u.Age > 25 && u.Address.State == "WA");
-var page = users.Find(u => u.Age > 0, skip: 10, limit: 20);
-var allUsers = users.FindAll();
+var user = await users.FindByIdAsync(userId);
+var adults = await users.FindAsync(u => u.Age >= 18);
+var seattleUsers = await users.FindAsync(u => u.Address.City == "Seattle");
+var gmailUsers = await users.FindAsync(u => u.Email.Contains("@gmail.com"));
+var results = await users.FindAsync(u => u.Age > 25 && u.Address.State == "WA");
+var page = await users.FindAsync(u => u.Age > 0, skip: 10, limit: 20);
+var allUsers = await users.FindAllAsync();
 ```
 
 ### 5. Update and delete
 
 ```csharp
 user.Age = 31;
-users.Update(user);
+await users.UpdateByIdAsync(user.Id, user);
 
-users.Delete(user.Id);
+await users.DeleteByIdAsync(user.Id);
 ```
 
 ### 6. Create indexes
 
 ```csharp
-users.CreateIndex(u => u.Email);
-users.CreateIndex(u => u.Email, unique: true);
+await users.CreateIndexAsync(u => u.Email);
+await users.CreateIndexAsync(u => u.Email, unique: true);
 ```
 
 ### 7. Use transactions
 
 ```csharp
-using var transaction = db.BeginTransaction();
+using var transaction = await db.BeginTransactionAsync();
 
-var users = transaction.GetCollection<User>("users");
-var orders = transaction.GetCollection<Order>("orders");
+var users = db.GetCollection<User>("users");
+var orders = db.GetCollection<Order>("orders");
 
-users.Insert(newUser);
-orders.Insert(newOrder);
+await users.InsertOneAsync(newUser, transaction);
+await orders.InsertOneAsync(newOrder, transaction);
 
-transaction.Commit();
+await transaction.CommitAsync();
 ```
 
 ## Advanced Usage
@@ -145,9 +145,10 @@ string idString = id.ToString();
 ### Collection Management
 
 ```csharp
-var collections = db.GetCollectionNames();
-db.DropCollection("users");
-bool exists = db.GetCollectionNames().Contains("users");
+var collections = await db.ListCollectionNamesAsync();
+await db.DropCollectionAsync("users");
+var allCollections = await db.ListCollectionNamesAsync();
+bool exists = allCollections.Contains("users");
 ```
 
 ## Query Translation
