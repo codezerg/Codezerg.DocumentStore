@@ -1,0 +1,401 @@
+LIBRARY: Codezerg.DocumentStore
+LANGUAGE: C#
+TARGET_FRAMEWORK: netstandard2.0
+DESCRIPTION: Full reference for document-oriented data layer for SQLite — flexible, schema-less, and fully embedded.
+
+================================================
+NAMESPACE: Codezerg.DocumentStore
+------------------------------------------------
+INTERFACE: IDocumentDatabase : IDisposable
+  PROPERTY:
+    - DatabaseName : string
+    - ConnectionString : string
+  METHODS:
+    - IDocumentCollection<T> GetCollection<T>(string name)
+    - Task CreateCollectionAsync<T>(string name)
+    - Task DropCollectionAsync(string name)
+    - Task<List<string>> ListCollectionNamesAsync()
+    - Task<IDocumentTransaction> BeginTransactionAsync()
+
+INTERFACE: IDocumentCollection<T> where T : class
+  PROPERTY:
+    - CollectionName : string
+  METHODS (INSERT):
+    - Task InsertOneAsync(T document, IDocumentTransaction? transaction=null)
+    - Task InsertManyAsync(IEnumerable<T> documents, IDocumentTransaction? transaction=null)
+  METHODS (FIND):
+    - Task<T?> FindByIdAsync(DocumentId id, IDocumentTransaction? transaction=null)
+    - Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<List<T>> FindAllAsync(IDocumentTransaction? transaction=null)
+    - Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction=null)
+  METHODS (COUNT):
+    - Task<long> CountAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<long> CountAllAsync(IDocumentTransaction? transaction=null)
+  METHODS (UPDATE):
+    - Task<bool> UpdateByIdAsync(DocumentId id, T document, IDocumentTransaction? transaction=null)
+    - Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction=null)
+    - Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction=null)
+  METHODS (DELETE):
+    - Task<bool> DeleteByIdAsync(DocumentId id, IDocumentTransaction? transaction=null)
+    - Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+  METHODS (QUERY):
+    - Task<bool> AnyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+  METHODS (INDEXING):
+    - Task CreateIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression, bool unique=false)
+    - Task DropIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression)
+
+INTERFACE: IDocumentTransaction : IDisposable, IAsyncDisposable
+  PROPERTY:
+    - DbTransaction : IDbTransaction
+  METHODS:
+    - Task CommitAsync()
+    - Task RollbackAsync()
+
+CLASS: DocumentId : IEquatable<DocumentId>, IComparable<DocumentId>
+  CTORS:
+    - DocumentId()
+    - DocumentId(byte[] value)
+    - DocumentId(string hexString)
+  STATIC PROPERTY:
+    - Empty : DocumentId
+  PROPERTY:
+    - Timestamp : DateTime
+  STATIC METHODS:
+    - DocumentId NewId()
+    - DocumentId Parse(string hexString)
+    - bool TryParse(string? hexString, out DocumentId id)
+  METHODS:
+    - override string ToString()
+    - byte[] ToByteArray()
+    - override bool Equals(object? obj)
+    - bool Equals(DocumentId other)
+    - override int GetHashCode()
+    - int CompareTo(DocumentId other)
+  OPERATORS:
+    - == (left, right)
+    - != (left, right)
+    - < (left, right)
+    - > (left, right)
+    - <= (left, right)
+    - >= (left, right)
+
+CLASS: SqliteDocumentDatabase : IDocumentDatabase
+  CTORS:
+    - SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger=null)
+    - SqliteDocumentDatabase(IOptions<DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger=null)
+  PROPERTY (impl):
+    - DatabaseName : string
+    - ConnectionString : string
+  METHODS (impl):
+    - IDocumentCollection<T> GetCollection<T>(string name)
+    - Task CreateCollectionAsync<T>(string name)
+    - Task DropCollectionAsync(string name)
+    - Task<List<string>> ListCollectionNamesAsync()
+    - Task<IDocumentTransaction> BeginTransactionAsync()
+    - void Dispose()
+
+CLASS (internal): SqliteDocumentCollection<T> : IDocumentCollection<T> where T : class
+  CTORS:
+    - SqliteDocumentCollection(SqliteDocumentDatabase database, string collectionName, ILogger logger)
+  PROPERTY (impl):
+    - CollectionName : string
+  METHODS (impl):
+    - Task InsertOneAsync(T document, IDocumentTransaction? transaction=null)
+    - Task InsertManyAsync(IEnumerable<T> documents, IDocumentTransaction? transaction=null)
+    - Task<T?> FindByIdAsync(DocumentId id, IDocumentTransaction? transaction=null)
+    - Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<List<T>> FindAllAsync(IDocumentTransaction? transaction=null)
+    - Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction=null)
+    - Task<long> CountAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<long> CountAllAsync(IDocumentTransaction? transaction=null)
+    - Task<bool> UpdateByIdAsync(DocumentId id, T document, IDocumentTransaction? transaction=null)
+    - Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction=null)
+    - Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction=null)
+    - Task<bool> DeleteByIdAsync(DocumentId id, IDocumentTransaction? transaction=null)
+    - Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task<bool> AnyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction=null)
+    - Task CreateIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression, bool unique=false)
+    - Task DropIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression)
+
+CLASS (internal): SqliteDocumentTransaction : IDocumentTransaction, IAsyncDisposable
+  CTORS:
+    - SqliteDocumentTransaction(SqliteTransaction transaction)
+  PROPERTY (impl):
+    - DbTransaction : IDbTransaction
+  METHODS (impl):
+    - Task CommitAsync()
+    - Task RollbackAsync()
+    - void Dispose()
+    - ValueTask DisposeAsync()
+
+CLASS (internal static): QueryTranslator
+  STATIC METHODS:
+    - (string WhereClause, List<object?> Parameters) Translate<T>(Expression<Func<T, bool>> expression)
+  DETAILS:
+    Translates LINQ expressions to SQLite WHERE clauses with JSON operations.
+    Supports: ==, !=, >, <, >=, <=, &&, ||, !
+    Supports: String.Contains, String.StartsWith, String.EndsWith
+    Uses json_extract(data, '$.fieldName') for field access.
+    Converts PascalCase properties to camelCase in JSON paths.
+
+CLASS (internal static): Compat
+  DETAILS:
+    Compatibility helpers for netstandard2.0
+  STATIC METHODS:
+    - int GetRandomInt32(int minValue, int maxValue)
+    - void FillRandom(byte[] data, int offset, int count)
+    - byte[] FromHexString(string hex)
+    - string ToHexString(byte[] bytes)
+    - int GetHashCodeForBytes(byte[] bytes)
+
+================================================
+NAMESPACE: Codezerg.DocumentStore.Configuration
+------------------------------------------------
+CLASS: DocumentDatabaseOptions
+  PROPERTY:
+    - ConnectionString : string?
+  METHODS:
+    - void Validate() (internal)
+
+CLASS: DocumentDatabaseOptionsBuilder
+  METHODS:
+    - DocumentDatabaseOptionsBuilder UseConnectionString(string connectionString)
+    - DocumentDatabaseOptions Build() (internal)
+
+================================================
+NAMESPACE: Codezerg.DocumentStore.Exceptions
+------------------------------------------------
+CLASS: DocumentNotFoundException : Exception
+  PROPERTY:
+    - DocumentId : DocumentId?
+    - CollectionName : string?
+  CTORS:
+    - DocumentNotFoundException()
+    - DocumentNotFoundException(string message)
+    - DocumentNotFoundException(string message, Exception innerException)
+    - DocumentNotFoundException(DocumentId documentId, string collectionName)
+
+CLASS: DuplicateKeyException : Exception
+  PROPERTY:
+    - KeyValue : object?
+    - CollectionName : string?
+  CTORS:
+    - DuplicateKeyException()
+    - DuplicateKeyException(string message)
+    - DuplicateKeyException(string message, Exception innerException)
+    - DuplicateKeyException(object keyValue, string collectionName)
+
+CLASS: InvalidQueryException : Exception
+  PROPERTY:
+    - QueryExpression : string?
+  CTORS:
+    - InvalidQueryException()
+    - InvalidQueryException(string message)
+    - InvalidQueryException(string message, Exception innerException)
+    - InvalidQueryException(string message, string queryExpression)
+
+================================================
+NAMESPACE: Codezerg.DocumentStore.Serialization
+------------------------------------------------
+CLASS (internal): DocumentIdJsonConverter : JsonConverter<DocumentId>
+  METHODS:
+    - DocumentId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    - void Write(Utf8JsonWriter writer, DocumentId value, JsonSerializerOptions options)
+
+CLASS (internal static): DocumentSerializer
+  STATIC PROPERTY:
+    - DefaultOptions : JsonSerializerOptions
+  DETAILS:
+    PropertyNamingPolicy: CamelCase
+    PropertyNameCaseInsensitive: true
+    DefaultIgnoreCondition: WhenWritingNull
+    WriteIndented: false
+    Converters: DocumentIdJsonConverter, JsonStringEnumConverter
+  STATIC METHODS:
+    - string Serialize<T>(T document, JsonSerializerOptions? options=null)
+    - T? Deserialize<T>(string json, JsonSerializerOptions? options=null)
+    - T DeserializeNonNull<T>(string json, JsonSerializerOptions? options=null)
+
+================================================
+SCHEMA (SQLite)
+------------------------------------------------
+TABLE: collections
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - name (TEXT NOT NULL UNIQUE)
+  - created_at (TEXT NOT NULL)
+
+TABLE: documents
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - collection_id (INTEGER NOT NULL, FK → collections.id ON DELETE CASCADE)
+  - document_id (TEXT NOT NULL, unique within collection)
+  - data (TEXT NOT NULL, JSON)
+  - created_at (TEXT NOT NULL)
+  - updated_at (TEXT NOT NULL)
+  - version (INTEGER DEFAULT 1)
+  - UNIQUE(collection_id, document_id)
+
+TABLE: indexes
+  - id (INTEGER PRIMARY KEY AUTOINCREMENT)
+  - collection_id (INTEGER NOT NULL, FK → collections.id ON DELETE CASCADE)
+  - name (TEXT NOT NULL)
+  - fields (TEXT NOT NULL, JSON array of field paths)
+  - unique_index (INTEGER DEFAULT 0)
+  - sparse (INTEGER DEFAULT 0)
+  - UNIQUE(collection_id, name)
+
+TABLE: indexed_values
+  - document_id (INTEGER NOT NULL, FK → documents.id ON DELETE CASCADE)
+  - index_id (INTEGER NOT NULL, FK → indexes.id ON DELETE CASCADE)
+  - field_path (TEXT NOT NULL)
+  - value_text (TEXT)
+  - value_number (REAL)
+  - value_boolean (INTEGER)
+  - value_type (TEXT)
+
+INDEXES:
+  - idx_documents_collection ON documents(collection_id)
+  - idx_documents_lookup ON documents(collection_id, document_id)
+  - idx_indexed_values_lookup ON indexed_values(index_id, field_path, value_text)
+  - idx_indexed_values_number ON indexed_values(index_id, field_path, value_number)
+
+================================================
+USAGE EXAMPLES:
+
+BASIC SETUP:
+var db = new SqliteDocumentDatabase("Data Source=mydb.db");
+var users = db.GetCollection<User>("users");
+
+SETUP WITH DI:
+services.AddDocumentDatabase(opts =>
+    opts.UseConnectionString("Data Source=mydb.db"));
+// Then inject IDocumentDatabase in constructor
+
+DOCUMENT CLASSES:
+public class User
+{
+    public DocumentId Id { get; set; }
+    public string Name { get; set; }
+    public int Age { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+INSERT:
+var user = new User { Name = "Alice", Age = 30 };
+await users.InsertOneAsync(user);
+Console.WriteLine($"Inserted: {user.Id}");
+
+FIND BY ID:
+var user = await users.FindByIdAsync(new DocumentId("..."));
+if (user != null) Console.WriteLine(user.Name);
+
+FIND WITH FILTER:
+var results = await users.FindAsync(u => u.Age > 25);
+foreach (var u in results) Console.WriteLine(u.Name);
+
+FIND ONE:
+var user = await users.FindOneAsync(u => u.Name == "Alice");
+
+FIND ALL:
+var allUsers = await users.FindAllAsync();
+
+FIND WITH PAGINATION:
+var page = await users.FindAsync(u => u.Age > 20, skip: 10, limit: 5);
+
+COUNT:
+var count = await users.CountAsync(u => u.Age > 25);
+var total = await users.CountAllAsync();
+
+UPDATE BY ID:
+var updated = new User { Name = "Bob", Age = 35 };
+await users.UpdateByIdAsync(userId, updated);
+
+UPDATE ONE:
+var success = await users.UpdateOneAsync(u => u.Name == "Alice", newUser);
+
+UPDATE MANY:
+var count = await users.UpdateManyAsync(
+    u => u.Age > 30,
+    u => u.Age += 1);
+
+DELETE BY ID:
+await users.DeleteByIdAsync(userId);
+
+DELETE ONE:
+await users.DeleteOneAsync(u => u.Name == "Alice");
+
+DELETE MANY:
+var deleted = await users.DeleteManyAsync(u => u.Age < 18);
+
+CHECK IF EXISTS:
+bool exists = await users.AnyAsync(u => u.Name == "Alice");
+
+INDEXING:
+await users.CreateIndexAsync(u => u.Name);
+await users.CreateIndexAsync(u => u.Age, unique: false);
+await users.DropIndexAsync(u => u.Name);
+
+TRANSACTIONS:
+using (var transaction = await db.BeginTransactionAsync())
+{
+    try
+    {
+        var user = new User { Name = "Charlie", Age = 40 };
+        await users.InsertOneAsync(user, transaction);
+        
+        var updated = new User { Name = "Charles", Age = 41 };
+        await users.UpdateByIdAsync(user.Id, updated, transaction);
+        
+        await transaction.CommitAsync();
+    }
+    catch
+    {
+        await transaction.RollbackAsync();
+        throw;
+    }
+}
+
+COMPLEX QUERIES:
+// AND
+var results = await users.FindAsync(u => u.Age > 25 && u.Name == "Alice");
+
+// OR
+var results = await users.FindAsync(u => u.Age < 18 || u.Age > 65);
+
+// String operations
+var results = await users.FindAsync(u => u.Name.Contains("li"));
+var results = await users.FindAsync(u => u.Name.StartsWith("A"));
+var results = await users.FindAsync(u => u.Name.EndsWith("ice"));
+
+// NOT
+var results = await users.FindAsync(u => !(u.Age > 30));
+
+================================================
+DOCUMENT ID DETAILS:
+- 12 bytes total
+  - 4 bytes: Unix timestamp (seconds)
+  - 5 bytes: Random value
+  - 3 bytes: Counter (unique per process)
+- Sortable by creation time
+- Guaranteed unique within a process (static counter, thread-safe)
+- Convert to/from hex string (24 chars)
+- Convert to/from byte array
+- Comparable and equatable
+
+================================================
+BEST PRACTICES:
+- Document classes should have Id, CreatedAt, UpdatedAt properties for automatic management.
+- Use DI pattern with AddDocumentDatabase() for production applications.
+- All queries use json_extract() with SQLite's built-in JSON support.
+- Transactions are optional but recommended for multi-step operations.
+- Indexes improve query performance on frequently filtered fields.
+- Use unique indexes to enforce document uniqueness on specific fields.
+- DocumentId is a value type (struct) — lightweight and zero-allocation.
+- JSON is stored as-is in documents table (camelCase for consistency).
+- Exceptions: DocumentNotFoundException, DuplicateKeyException, InvalidQueryException.
+- QueryTranslator automatically converts filter expressions to SQL WHERE clauses.
+- Nested property filtering is supported via JSON path expressions.
