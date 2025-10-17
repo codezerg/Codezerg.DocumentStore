@@ -20,15 +20,14 @@ Codezerg.DocumentStore is a document-oriented data layer for SQLite that provide
 
 ## Recent Changes
 
-The following recent changes have been made to the codebase (per git history):
+The following significant changes have been made to the codebase:
 
-- **8d85989**: Remove benchmarks and obsolete documentation
-- **dd4e3d3**: Remove BinaryDocumentSerializer and update benchmarks
-- **dda2f9f**: Add benchmarks project and update documentation
-- **4a8771b**: Add experimental BinaryDocumentSerializer and benchmarks
-- **bd45e26**: Add DI support and refactor database constructors
-
-**Note**: The benchmarks project and SQLITE_JSONB_REFERENCE.md documentation have been removed from the repository. The current implementation uses standard JSON text storage via SQLite's json_extract functions.
+- **Transaction support removed**: All transaction-related parameters and `IDocumentTransaction` interface have been removed for API simplification
+- **Async collection access**: `GetCollection<T>()` changed to `GetCollectionAsync<T>()` to support async initialization
+- **JSONB storage support**: Binary JSON storage (JSONB) is now supported and enabled by default for 20-76% performance improvements
+- **Collection caching**: In-memory caching support added via `CachedDocumentCollection<T>` for improved read performance
+- **Advanced configuration**: New SQLite pragma options (JournalMode, PageSize, Synchronous) for performance tuning
+- **Benchmarking infrastructure**: Comprehensive benchmarks added to measure performance with/without JSONB and caching
 
 ## Build and Test Commands
 
@@ -75,40 +74,39 @@ The library follows an interface-based design pattern with fully async APIs:
 
 #### IDocumentDatabase
 Main entry point for database operations. Key methods:
-- `IDocumentCollection<T> GetCollection<T>(string name)` - Get or create a collection
+- `Task<IDocumentCollection<T>> GetCollectionAsync<T>(string name)` - Get or create a collection (async)
 - `Task CreateCollectionAsync<T>(string name)` - Explicitly create a collection
 - `Task DropCollectionAsync(string name)` - Remove a collection and all its documents
 - `Task<List<string>> ListCollectionNamesAsync()` - List all collections
-- `Task<IDocumentTransaction> BeginTransactionAsync()` - Start a new transaction
 - `string DatabaseName { get; }` - Get the database name
 - `string ConnectionString { get; }` - Get the connection string
 
 #### IDocumentCollection&lt;T&gt;
-Type-safe collection operations. All methods support optional transactions:
+Type-safe collection operations:
 
 **Insert Operations:**
-- `Task InsertOneAsync(T document, IDocumentTransaction? transaction = null)` - Insert a single document
-- `Task InsertManyAsync(IEnumerable<T> documents, IDocumentTransaction? transaction = null)` - Insert multiple documents
+- `Task InsertOneAsync(T document)` - Insert a single document
+- `Task InsertManyAsync(IEnumerable<T> documents)` - Insert multiple documents
 
 **Query Operations:**
-- `Task<T?> FindByIdAsync(DocumentId id, IDocumentTransaction? transaction = null)` - Find by ID
-- `Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Find first matching document
-- `Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Find all matching documents
-- `Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction = null)` - Find with pagination
-- `Task<List<T>> FindAllAsync(IDocumentTransaction? transaction = null)` - Find all documents
-- `Task<long> CountAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Count matching documents
-- `Task<long> CountAllAsync(IDocumentTransaction? transaction = null)` - Count all documents
-- `Task<bool> AnyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Check if any match
+- `Task<T?> FindByIdAsync(DocumentId id)` - Find by ID
+- `Task<T?> FindOneAsync(Expression<Func<T, bool>> filter)` - Find first matching document
+- `Task<List<T>> FindAsync(Expression<Func<T, bool>> filter)` - Find all matching documents
+- `Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit)` - Find with pagination
+- `Task<List<T>> FindAllAsync()` - Find all documents
+- `Task<long> CountAsync(Expression<Func<T, bool>> filter)` - Count matching documents
+- `Task<long> CountAllAsync()` - Count all documents
+- `Task<bool> AnyAsync(Expression<Func<T, bool>> filter)` - Check if any match
 
 **Update Operations:**
-- `Task<bool> UpdateByIdAsync(DocumentId id, T document, IDocumentTransaction? transaction = null)` - Update by ID
-- `Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction = null)` - Update first match
-- `Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction = null)` - Update multiple documents
+- `Task<bool> UpdateByIdAsync(DocumentId id, T document)` - Update by ID
+- `Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document)` - Update first match
+- `Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction)` - Update multiple documents
 
 **Delete Operations:**
-- `Task<bool> DeleteByIdAsync(DocumentId id, IDocumentTransaction? transaction = null)` - Delete by ID
-- `Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Delete first match
-- `Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null)` - Delete all matching
+- `Task<bool> DeleteByIdAsync(DocumentId id)` - Delete by ID
+- `Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter)` - Delete first match
+- `Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter)` - Delete all matching
 
 **Index Operations:**
 - `Task CreateIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression, bool unique = false)` - Create an index
@@ -117,35 +115,32 @@ Type-safe collection operations. All methods support optional transactions:
 **Properties:**
 - `string CollectionName { get; }` - Get the collection name
 
-#### IDocumentTransaction
-Transaction support for atomic operations. Implements `IDisposable` and `IAsyncDisposable`:
-- `Task CommitAsync()` - Commit the transaction
-- `Task RollbackAsync()` - Rollback the transaction
-- `IDbTransaction DbTransaction { get; }` - Access underlying database transaction
-
 ### Constructors
 
 SqliteDocumentDatabase provides two constructors:
 
-1. **String constructor**: `SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger = null)`
+1. **String constructor**: `SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger = null, bool useJsonB = true)`
    - Direct instantiation with a connection string
    - Used for simple scenarios and testing
+   - `useJsonB` parameter enables JSONB binary storage (default: true)
 
 2. **Options constructor**: `SqliteDocumentDatabase(IOptions<DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger = null)`
    - Supports Microsoft.Extensions.Options pattern
    - Used for dependency injection scenarios
-   - Internally delegates to the string constructor after extracting and validating the connection string
+   - Internally delegates to the private constructor after extracting and validating options
 
 ### Database Schema
 
 SQLite uses a **centralized schema** with four main tables:
 
 1. **collections**: Stores collection metadata (id, name, created_at)
-2. **documents**: Stores document JSON data with foreign key to collections
+2. **documents**: Stores document data (BLOB for JSONB or TEXT for JSON) with foreign key to collections
 3. **indexes**: Stores index definitions per collection
 4. **indexed_values**: Stores extracted index values for fast lookups
 
 All tables use cascading deletes to maintain referential integrity.
+
+**Note**: The `data` column in the `documents` table is BLOB when JSONB is enabled (default), or TEXT when JSONB is disabled.
 
 ### DocumentId System
 
@@ -166,16 +161,40 @@ The **QueryTranslator** class (src/Codezerg.DocumentStore/QueryTranslator.cs) co
 - String methods: Contains, StartsWith, EndsWith (translated to LIKE)
 - Nested property access: `u => u.Address.City` becomes `json_extract(data, '$.address.city')`
 
-### Transaction Support
-
-Transactions wrap SQLite transactions and can be used across multiple collection operations. Transactions must be explicitly committed or they are rolled back on dispose.
-
 ### Serialization
 
 Documents are serialized to JSON using System.Text.Json with:
 - CamelCase property naming convention
 - DocumentId custom converter (DocumentIdJsonConverter)
 - Automatic timestamps (CreatedAt, UpdatedAt) when documents have these properties
+
+### JSONB Storage
+
+JSONB (binary JSON) storage is enabled by default and provides significant performance improvements:
+- **20-76% faster** operations (inserts, queries, updates)
+- **5-10% smaller** storage size
+- SQLite automatically converts JSON text to/from JSONB binary format
+- All json_extract() queries work seamlessly with JSONB data
+
+To disable JSONB and use text storage:
+```csharp
+var db = new SqliteDocumentDatabase("Data Source=app.db", useJsonB: false);
+```
+
+### Collection Caching
+
+In-memory caching can be enabled per collection for improved read performance:
+- Caches documents in memory after first load
+- Transparent cache invalidation on writes
+- Configurable via `CacheCollection()` or `CacheCollections()` in options builder
+
+Example:
+```csharp
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=app.db")
+           .CacheCollection("users")
+           .CacheCollections(name => name.StartsWith("cache_")));
+```
 
 ## Key Implementation Files
 
@@ -184,22 +203,23 @@ All source files are located in `src/Codezerg.DocumentStore/`:
 ### Core Implementation
 - **SqliteDocumentDatabase.cs**: Main database implementation, manages connections and schema
 - **SqliteDocumentCollection.cs**: Collection operations, query execution, index management
-- **SqliteDocumentTransaction.cs**: Transaction implementation wrapping SQLite transactions
 - **QueryTranslator.cs**: LINQ to SQL translation engine
 - **DocumentId.cs**: Unique identifier implementation (12-byte ObjectId-inspired)
 - **Compat.cs**: .NET Standard 2.0 compatibility helpers
 
 ### Interfaces
-- **IDocumentDatabase.cs**: Database interface defining collection management and transactions
+- **IDocumentDatabase.cs**: Database interface defining collection management
 - **IDocumentCollection.cs**: Collection interface defining CRUD, query, and index operations
-- **IDocumentTransaction.cs**: Transaction interface for atomic operations
 
 ### Dependency Injection
 - **ServiceCollectionExtensions.cs**: Extension methods for registering database with DI container (`AddDocumentDatabase`)
 
 ### Configuration (`Configuration/` subdirectory)
-- **DocumentDatabaseOptions.cs**: Configuration options for database setup
-- **DocumentDatabaseOptionsBuilder.cs**: Fluent builder for configuration options
+- **DocumentDatabaseOptions.cs**: Configuration options for database setup (ConnectionString, UseJsonB, JournalMode, PageSize, Synchronous, CachedCollectionPredicates)
+- **DocumentDatabaseOptionsBuilder.cs**: Fluent builder for configuration options with methods like UseJsonB(), UseJournalMode(), UsePageSize(), UseSynchronous(), CacheCollection(), CacheCollections()
+
+### Caching (`Caching/` subdirectory)
+- **CachedDocumentCollection.cs**: In-memory caching wrapper for IDocumentCollection<T> that caches documents by ID
 
 ### Serialization (`Serialization/` subdirectory)
 - **DocumentSerializer.cs**: JSON serialization configuration with camelCase naming
@@ -260,9 +280,19 @@ users.CreateIndex(u => u.Email, unique: true)
 The library supports Microsoft.Extensions.DependencyInjection via the `AddDocumentDatabase` extension method:
 
 ```csharp
-// Register with connection string for file-based database
+// Basic registration with connection string
 services.AddDocumentDatabase(options =>
     options.UseConnectionString("Data Source=myapp.db"));
+
+// Advanced configuration with JSONB, caching, and pragma settings
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=myapp.db")
+           .UseJsonB(true)
+           .UseJournalMode("WAL")
+           .UsePageSize(4096)
+           .UseSynchronous("NORMAL")
+           .CacheCollection("users")
+           .CacheCollections(name => name.StartsWith("hot_")));
 
 // For in-memory databases
 services.AddDocumentDatabase(options =>
@@ -277,6 +307,12 @@ public class UserService
     {
         _database = database;
     }
+
+    public async Task<User?> GetUserAsync(DocumentId id)
+    {
+        var users = await _database.GetCollectionAsync<User>("users");
+        return await users.FindByIdAsync(id);
+    }
 }
 ```
 
@@ -285,9 +321,42 @@ The database is registered as a singleton and uses the `IOptions<DocumentDatabas
 ## Testing Guidelines
 
 Tests use xUnit and follow the pattern:
-- In-memory databases for test isolation (`new SqliteDocumentDatabase("Data Source=:memory:")`)
-- Each test creates its own database instance
-- Tests cover CRUD operations, queries, transactions, and edge cases
+- **File-based databases** for test isolation (in-memory databases don't work with connection-per-operation)
+- Each test class creates a temporary database file in the system temp directory
+- `IAsyncLifetime` is used for async initialization of collections via `GetCollectionAsync`
+- Cleanup happens in `DisposeAsync()` which deletes the temporary database file
+- Tests cover CRUD operations, queries, indexes, and edge cases
+
+Example test class structure:
+```csharp
+public class MyTests : IAsyncLifetime
+{
+    private readonly string _dbFile;
+    private readonly SqliteDocumentDatabase _database;
+    private IDocumentCollection<MyDocument> _collection = null!;
+
+    public MyTests()
+    {
+        _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
+        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}");
+    }
+
+    public async Task InitializeAsync()
+    {
+        _collection = await _database.GetCollectionAsync<MyDocument>("myCollection");
+    }
+
+    public Task DisposeAsync()
+    {
+        _database?.Dispose();
+        if (File.Exists(_dbFile))
+        {
+            try { File.Delete(_dbFile); } catch { }
+        }
+        return Task.CompletedTask;
+    }
+}
+```
 
 ## Important Considerations
 
@@ -306,12 +375,20 @@ The QueryTranslator has specific limitations:
 - Complex projections and joins are not supported
 - Custom methods cannot be used in expressions
 
+### Transactions
+
+**Note**: Transaction support has been removed from the current API for simplicity. All operations execute immediately and are not part of an explicit transaction context. If you need transactional behavior, consider:
+- Using SQLite's implicit transaction handling for single operations
+- Implementing application-level compensation logic for multi-step operations
+- Future versions may reintroduce transaction support based on user feedback
+
 ### Connection Management
 
-- SqliteDocumentDatabase maintains a single persistent connection
-- The connection is opened in the constructor and must be disposed properly
-- Collections share the same connection instance
-- Transactions use the same connection to ensure ACID properties
+- **Connection-per-operation pattern**: Each database operation creates and disposes its own connection
+- No persistent connections are maintained - connections are created on-demand via `CreateConnection()`
+- SQLite pragmas (JournalMode, PageSize, Synchronous) are applied to each new connection
+- Thread-safe schema initialization ensures database tables are created only once
+- **Important**: In-memory databases (`:memory:`) are not compatible with this pattern - always use file-based databases
 
 ## Project Structure
 
@@ -319,16 +396,16 @@ The QueryTranslator has specific limitations:
 Codezerg.DocumentStore/
 ├── src/
 │   ├── Codezerg.DocumentStore/              (Main Library - .NET Standard 2.0)
-│   │   ├── SqliteDocumentDatabase.cs        (250 lines)
-│   │   ├── SqliteDocumentCollection.cs      (492 lines)
-│   │   ├── SqliteDocumentTransaction.cs     (69 lines)
-│   │   ├── QueryTranslator.cs               (232 lines)
-│   │   ├── DocumentId.cs                    (175 lines)
-│   │   ├── IDocumentDatabase.cs             (53 lines)
-│   │   ├── IDocumentCollection.cs           (159 lines)
-│   │   ├── IDocumentTransaction.cs          (26 lines)
-│   │   ├── ServiceCollectionExtensions.cs   (46 lines)
-│   │   ├── Compat.cs                        (81 lines)
+│   │   ├── SqliteDocumentDatabase.cs
+│   │   ├── SqliteDocumentCollection.cs
+│   │   ├── QueryTranslator.cs
+│   │   ├── DocumentId.cs
+│   │   ├── IDocumentDatabase.cs
+│   │   ├── IDocumentCollection.cs
+│   │   ├── ServiceCollectionExtensions.cs
+│   │   ├── Compat.cs
+│   │   ├── Caching/
+│   │   │   └── CachedDocumentCollection.cs
 │   │   ├── Configuration/
 │   │   │   ├── DocumentDatabaseOptions.cs
 │   │   │   └── DocumentDatabaseOptionsBuilder.cs
@@ -341,10 +418,18 @@ Codezerg.DocumentStore/
 │   │       └── InvalidQueryException.cs
 │   │
 │   └── Codezerg.DocumentStore.Tests/        (Test Suite - .NET 9.0)
-│       ├── SqliteDocumentDatabaseTests.cs   (129 lines)
-│       ├── SqliteDocumentCollectionTests.cs (422 lines)
-│       ├── DocumentIdTests.cs               (140 lines)
-│       └── TransactionTests.cs              (231 lines)
+│       ├── SqliteDocumentDatabaseTests.cs
+│       ├── SqliteDocumentCollectionTests.cs
+│       ├── DocumentIdTests.cs
+│       ├── IndexTests.cs
+│       └── JsonBTests.cs
+│
+├── benchmarks/
+│   └── Codezerg.DocumentStore.Benchmarks/   (Performance Benchmarks - .NET 9.0)
+│       └── Various benchmark classes
+│
+├── docs/
+│   └── SQLITE_JSONB_REFERENCE.md            (JSONB reference documentation)
 │
 └── samples/
     └── SampleApp/                           (.NET 9.0)
@@ -353,9 +438,24 @@ Codezerg.DocumentStore/
 
 ## Test Coverage
 
-The test suite includes 922 lines of comprehensive tests across four test files:
+The test suite includes comprehensive tests across multiple test files:
 
-- **SqliteDocumentDatabaseTests.cs** (129 lines): Database creation, collection management, transaction initialization
-- **SqliteDocumentCollectionTests.cs** (422 lines): CRUD operations, queries, indexes, pagination, complex filters
-- **DocumentIdTests.cs** (140 lines): ID generation, parsing, comparison, equality, timestamp validation
-- **TransactionTests.cs** (231 lines): Transaction commit/rollback, multi-collection atomicity, error handling
+- **SqliteDocumentDatabaseTests.cs**: Database creation, collection management
+- **SqliteDocumentCollectionTests.cs**: CRUD operations, queries, indexes, pagination, complex filters
+- **DocumentIdTests.cs**: ID generation, parsing, comparison, equality, timestamp validation
+- **IndexTests.cs**: Index creation, unique constraints, performance testing
+- **JsonBTests.cs**: JSONB storage format validation and testing
+
+## Benchmarks
+
+The benchmarks project (benchmarks/Codezerg.DocumentStore.Benchmarks) provides performance measurements for:
+- Insert operations (with/without JSONB)
+- Query operations (FindById, Find with filters)
+- Update operations (UpdateById, UpdateMany)
+- Mixed workloads (realistic usage patterns)
+- Caching performance impact
+
+Run benchmarks with:
+```bash
+dotnet run --project benchmarks/Codezerg.DocumentStore.Benchmarks/Codezerg.DocumentStore.Benchmarks.csproj -c Release
+```

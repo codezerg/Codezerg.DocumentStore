@@ -7,20 +7,31 @@ namespace Codezerg.DocumentStore.Tests;
 /// <summary>
 /// Comprehensive tests for index functionality
 /// </summary>
-public class IndexTests : IDisposable
+public class IndexTests : IAsyncLifetime
 {
+    private readonly string _dbFile;
     private readonly SqliteDocumentDatabase _database;
-    private readonly IDocumentCollection<TestProduct> _products;
+    private IDocumentCollection<TestProduct> _products = null!;
 
     public IndexTests()
     {
-        _database = new SqliteDocumentDatabase("Data Source=:memory:");
-        _products = _database.GetCollection<TestProduct>("products");
+        _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
+        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}");
     }
 
-    public void Dispose()
+    public async Task InitializeAsync()
+    {
+        _products = await _database.GetCollectionAsync<TestProduct>("products");
+    }
+
+    public Task DisposeAsync()
     {
         _database?.Dispose();
+        if (File.Exists(_dbFile))
+        {
+            try { File.Delete(_dbFile); } catch { }
+        }
+        return Task.CompletedTask;
     }
 
     #region Basic Index Creation and Dropping
@@ -340,40 +351,6 @@ public class IndexTests : IDisposable
         // Duplicate Barcode should fail
         await Assert.ThrowsAsync<DuplicateKeyException>(() =>
             _products.InsertOneAsync(new TestProduct { Sku = "SKU-002", Barcode = "BAR-001" }));
-    }
-
-    #endregion
-
-    #region Transaction Tests with Indexes
-
-    [Fact]
-    public async Task Index_WithTransaction_ShouldRespectTransactionBoundary()
-    {
-        await _products.CreateIndexAsync(p => p.Sku, unique: true);
-
-        await using var transaction = await _database.BeginTransactionAsync();
-
-        await _products.InsertOneAsync(new TestProduct { Sku = "WID-001", Name = "Widget" }, transaction);
-
-        // Should be able to see within transaction
-        var found = await _products.FindOneAsync(p => p.Sku == "WID-001", transaction);
-        Assert.NotNull(found);
-
-        // Rollback (via dispose without commit)
-    }
-
-    [Fact]
-    public async Task Index_Unique_WithTransaction_ShouldEnforceWithinTransaction()
-    {
-        await _products.CreateIndexAsync(p => p.Sku, unique: true);
-
-        await using var transaction = await _database.BeginTransactionAsync();
-
-        await _products.InsertOneAsync(new TestProduct { Sku = "WID-001", Name = "Widget" }, transaction);
-
-        // Duplicate within same transaction should fail
-        await Assert.ThrowsAsync<DuplicateKeyException>(() =>
-            _products.InsertOneAsync(new TestProduct { Sku = "WID-001", Name = "Duplicate" }, transaction));
     }
 
     #endregion

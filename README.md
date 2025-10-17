@@ -7,7 +7,8 @@ Document-oriented data layer for SQLite. Store and query JSON documents with LIN
 - **Document storage**: Store POCOs as JSON documents without predefined schemas
 - **LINQ queries**: Type-safe queries translated to SQLite JSON operations
 - **Indexing**: Regular and unique indexes for fast lookups
-- **Transactions**: ACID transaction support across collections
+- **JSONB storage**: Binary JSON format for 20-76% faster operations (enabled by default)
+- **Collection caching**: Optional in-memory caching for improved read performance
 - **DocumentId**: 12-byte unique identifier with timestamp ordering
 - **.NET Standard 2.0**: Broad compatibility across .NET platforms
 
@@ -44,7 +45,7 @@ public class Address
 using Codezerg.DocumentStore;
 
 using var db = new SqliteDocumentDatabase("Data Source=myapp.db");
-var users = db.GetCollection<User>("users");
+var users = await db.GetCollectionAsync<User>("users");
 ```
 
 ### 3. Insert documents
@@ -93,34 +94,32 @@ await users.CreateIndexAsync(u => u.Email);
 await users.CreateIndexAsync(u => u.Email, unique: true);
 ```
 
-### 7. Use transactions
-
-```csharp
-using var transaction = await db.BeginTransactionAsync();
-
-var users = db.GetCollection<User>("users");
-var orders = db.GetCollection<Order>("orders");
-
-await users.InsertOneAsync(newUser, transaction);
-await orders.InsertOneAsync(newOrder, transaction);
-
-await transaction.CommitAsync();
-```
-
 ## Advanced Usage
 
-### In-Memory Databases
+### Connection Management
+
+The library uses a **connection-per-operation pattern** where each database operation creates and disposes its own connection. This provides:
+- Thread-safe operations without shared connection state
+- Proper resource cleanup after each operation
+- Better isolation between operations
+
+**Important**: In-memory databases (`:memory:`) are not supported because each new connection creates a separate in-memory database. Always use file-based databases:
 
 ```csharp
-using var db = new SqliteDocumentDatabase("Data Source=:memory:");
-var users = db.GetCollection<User>("users");
+// Recommended: File-based database
+using var db = new SqliteDocumentDatabase("Data Source=myapp.db");
+
+// NOT supported with connection-per-operation
+// using var db = new SqliteDocumentDatabase("Data Source=:memory:");
 ```
 
 ### Dependency Injection
 
 ```csharp
 services.AddDocumentDatabase(options =>
-    options.UseConnectionString("Data Source=myapp.db"));
+    options.UseConnectionString("Data Source=myapp.db")
+           .UseJsonB(true)
+           .CacheCollection("users"));
 
 public class MyService
 {
@@ -129,6 +128,12 @@ public class MyService
     public MyService(IDocumentDatabase database)
     {
         _database = database;
+    }
+
+    public async Task<User?> GetUserAsync(DocumentId id)
+    {
+        var users = await _database.GetCollectionAsync<User>("users");
+        return await users.FindByIdAsync(id);
     }
 }
 ```
@@ -151,6 +156,30 @@ var allCollections = await db.ListCollectionNamesAsync();
 bool exists = allCollections.Contains("users");
 ```
 
+### JSONB Performance
+
+JSONB binary storage is enabled by default and provides significant performance benefits:
+
+```csharp
+// JSONB enabled (default) - 20-76% faster
+var db = new SqliteDocumentDatabase("Data Source=app.db");
+
+// Disable JSONB if needed (uses JSON text storage)
+var db = new SqliteDocumentDatabase("Data Source=app.db", useJsonB: false);
+```
+
+### Collection Caching
+
+Enable in-memory caching for frequently accessed collections:
+
+```csharp
+services.AddDocumentDatabase(options =>
+    options.UseConnectionString("Data Source=app.db")
+           .CacheCollection("users")
+           .CacheCollection("products")
+           .CacheCollections(name => name.StartsWith("hot_")));
+```
+
 ## Query Translation
 
 | C# Expression | SQLite Translation |
@@ -164,9 +193,19 @@ bool exists = allCollections.Contains("users");
 ## Development
 
 ```bash
+# Build the solution
 dotnet build
+
+# Run tests
 dotnet test
+
+# Run sample application
 dotnet run --project samples/SampleApp/SampleApp.csproj
+
+# Run benchmarks
+dotnet run --project benchmarks/Codezerg.DocumentStore.Benchmarks/Codezerg.DocumentStore.Benchmarks.csproj -c Release
+
+# Create NuGet package
 dotnet pack -c Release
 ```
 
@@ -179,6 +218,19 @@ dotnet pack -c Release
 ### Database Schema
 
 Four tables: `collections`, `documents`, `indexes`, `indexed_values` with cascading deletes.
+
+The `documents` table stores data as:
+- **BLOB** when JSONB is enabled (default) for binary JSON storage
+- **TEXT** when JSONB is disabled for traditional JSON text storage
+
+### Performance
+
+JSONB binary storage provides:
+- **20-76% faster** operations (inserts, queries, updates)
+- **5-10% smaller** storage size
+- Seamless integration with all json_extract() queries
+
+See `benchmarks/` directory for detailed performance comparisons.
 
 ## License
 

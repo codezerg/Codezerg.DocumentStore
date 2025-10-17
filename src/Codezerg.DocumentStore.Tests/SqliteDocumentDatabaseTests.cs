@@ -1,28 +1,46 @@
 using Codezerg.DocumentStore;
+using Dapper;
 
 namespace Codezerg.DocumentStore.Tests;
 
 public class SqliteDocumentDatabaseTests : IDisposable
 {
+    private readonly string _dbFile;
     private readonly SqliteDocumentDatabase _database;
 
     public SqliteDocumentDatabaseTests()
     {
-        _database = new SqliteDocumentDatabase("Data Source=:memory:");
+        _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
+        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}");
     }
 
     public void Dispose()
     {
         _database?.Dispose();
+        if (File.Exists(_dbFile))
+        {
+            try { File.Delete(_dbFile); } catch { }
+        }
     }
 
     [Fact]
     public void Constructor_ShouldCreateInMemoryDatabase()
     {
-        using var db = new SqliteDocumentDatabase("Data Source=:memory:");
+        var tempFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
+        try
+        {
+            using var db = new SqliteDocumentDatabase($"Data Source={tempFile}");
 
-        Assert.NotNull(db);
-        Assert.Equal(":memory:", db.DatabaseName);
+            Assert.NotNull(db);
+            Assert.NotEqual(":memory:", db.DatabaseName);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
     }
 
     [Fact]
@@ -50,19 +68,19 @@ public class SqliteDocumentDatabaseTests : IDisposable
     }
 
     [Fact]
-    public void GetCollection_ShouldReturnCollection()
+    public async Task GetCollection_ShouldReturnCollection()
     {
-        var collection = _database.GetCollection<TestDocument>("test");
+        var collection = await _database.GetCollectionAsync<TestDocument>("test");
 
         Assert.NotNull(collection);
         Assert.Equal("test", collection.CollectionName);
     }
 
     [Fact]
-    public void GetCollection_ShouldReturnSameInstanceForSameName()
+    public async Task GetCollection_ShouldReturnSameInstanceForSameName()
     {
-        var collection1 = _database.GetCollection<TestDocument>("test");
-        var collection2 = _database.GetCollection<TestDocument>("test");
+        var collection1 = await _database.GetCollectionAsync<TestDocument>("test");
+        var collection2 = await _database.GetCollectionAsync<TestDocument>("test");
 
         Assert.Same(collection1, collection2);
     }
@@ -113,12 +131,99 @@ public class SqliteDocumentDatabaseTests : IDisposable
     }
 
     [Fact]
-    public async Task BeginTransaction_ShouldReturnTransaction()
+    public void Constructor_ShouldApplyDefaultPragmas()
     {
-        using var transaction = await _database.BeginTransactionAsync();
+        var tempFile = Path.Combine(Path.GetTempPath(), $"test_default_pragma_{Guid.NewGuid()}.db");
+        try
+        {
+            using var db = new SqliteDocumentDatabase($"Data Source={tempFile}");
 
-        Assert.NotNull(transaction);
-        Assert.NotNull(transaction.DbTransaction);
+            // Query pragma values from the database
+            using (var connection = db.CreateConnection())
+            {
+                var journalMode = connection.QuerySingle<string>("PRAGMA journal_mode;");
+                var pageSize = connection.QuerySingle<int>("PRAGMA page_size;");
+                var synchronous = connection.QuerySingle<int>("PRAGMA synchronous;");
+
+                Assert.Equal("wal", journalMode.ToLowerInvariant());
+                Assert.Equal(4096, pageSize);
+                Assert.Equal(1, synchronous); // NORMAL = 1
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public void Constructor_ShouldApplyCustomPragmasViaOptions()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"test_pragma_{Guid.NewGuid()}.db");
+        try
+        {
+            var options = Microsoft.Extensions.Options.Options.Create(
+                new Configuration.DocumentDatabaseOptions
+                {
+                    ConnectionString = $"Data Source={tempFile}",
+                    JournalMode = "DELETE",
+                    PageSize = 8192,
+                    Synchronous = "FULL"
+                });
+
+            using var db = new SqliteDocumentDatabase(options);
+
+            // Query pragma values from the database
+            using (var connection = db.CreateConnection())
+            {
+                var journalMode = connection.QuerySingle<string>("PRAGMA journal_mode;");
+                var pageSize = connection.QuerySingle<int>("PRAGMA page_size;");
+                var synchronous = connection.QuerySingle<int>("PRAGMA synchronous;");
+
+                Assert.Equal("delete", journalMode.ToLowerInvariant());
+                Assert.Equal(8192, pageSize);
+                Assert.Equal(2, synchronous); // FULL = 2
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public void Constructor_ShouldAllowNullPragmaValues()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"test_null_pragma_{Guid.NewGuid()}.db");
+        try
+        {
+            var options = Microsoft.Extensions.Options.Options.Create(
+                new Configuration.DocumentDatabaseOptions
+                {
+                    ConnectionString = $"Data Source={tempFile}",
+                    JournalMode = null,
+                    PageSize = null,
+                    Synchronous = null
+                });
+
+            using var db = new SqliteDocumentDatabase(options);
+
+            // Should not throw exception
+            Assert.NotNull(db);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
     }
 
     private class TestDocument

@@ -1,3 +1,5 @@
+using Codezerg.DocumentStore.Caching;
+using Codezerg.DocumentStore.Configuration;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -7,6 +9,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore;
@@ -16,12 +19,13 @@ namespace Codezerg.DocumentStore;
 /// </summary>
 public class SqliteDocumentDatabase : IDocumentDatabase
 {
-    private readonly string _connectionString;
+    private readonly DocumentDatabaseOptions _options;
     private readonly string _databaseName;
-    private readonly SqliteConnection _connection;
     private readonly ConcurrentDictionary<string, object> _collections = new();
     private readonly ILogger<SqliteDocumentDatabase> _logger;
-    private bool _disposed;
+    private bool _supportsJsonB;
+    private bool _schemaInitialized;
+    private readonly object _schemaLock = new object();
 
     /// <summary>
     /// Gets the database name.
@@ -31,37 +35,26 @@ public class SqliteDocumentDatabase : IDocumentDatabase
     /// <summary>
     /// Gets the connection string.
     /// </summary>
-    public string ConnectionString => _connectionString;
+    public string ConnectionString => _options.ConnectionString;
+
+    /// <summary>
+    /// Gets whether to use JSONB (binary JSON) storage format.
+    /// </summary>
+    public bool UseJsonB => _options.UseJsonB;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SqliteDocumentDatabase"/> class.
     /// </summary>
     /// <param name="connectionString">The SQLite connection string.</param>
     /// <param name="logger">Optional logger.</param>
-    public SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger = null)
+    /// <param name="useJsonB">Whether to use JSONB storage format (default: true).</param>
+    public SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger = null, bool useJsonB = true)
+        : this(new DocumentDatabaseOptions
+        {
+            ConnectionString = connectionString,
+            UseJsonB = useJsonB
+        }, logger)
     {
-        if (string.IsNullOrWhiteSpace(connectionString))
-            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
-
-        _connectionString = connectionString;
-        _logger = logger ?? NullLogger<SqliteDocumentDatabase>.Instance;
-
-        // Extract database name from connection string or file path
-        var builder = new SqliteConnectionStringBuilder(connectionString);
-        _databaseName = string.IsNullOrEmpty(builder.DataSource)
-            ? "memory"
-            : Path.GetFileNameWithoutExtension(builder.DataSource);
-
-        _connection = new SqliteConnection(connectionString);
-        _connection.Open();
-
-        _logger.LogInformation("Opened database connection to {DatabaseName}", _databaseName);
-
-        // Enable JSON support
-        EnableJsonSupport();
-
-        // Initialize centralized schema
-        InitializeSchema();
     }
 
     /// <summary>
@@ -69,12 +62,43 @@ public class SqliteDocumentDatabase : IDocumentDatabase
     /// </summary>
     /// <param name="options">The database configuration options.</param>
     /// <param name="logger">Optional logger.</param>
-    public SqliteDocumentDatabase(IOptions<Configuration.DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger = null)
-        : this(GetConnectionStringFromOptions(options), logger)
+    public SqliteDocumentDatabase(IOptions<DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger = null)
+        : this(ValidateAndGetOptions(options), logger)
     {
     }
 
-    private static string GetConnectionStringFromOptions(IOptions<Configuration.DocumentDatabaseOptions> options)
+    /// <summary>
+    /// Internal constructor that accepts options directly.
+    /// </summary>
+    private SqliteDocumentDatabase(DocumentDatabaseOptions options, ILogger<SqliteDocumentDatabase>? logger)
+    {
+        if (options == null)
+            throw new ArgumentNullException(nameof(options));
+
+        options.Validate();
+
+        _options = options;
+        _logger = logger ?? NullLogger<SqliteDocumentDatabase>.Instance;
+
+        // Extract database name from connection string or file path
+        var builder = new SqliteConnectionStringBuilder(_options.ConnectionString);
+        _databaseName = string.IsNullOrEmpty(builder.DataSource)
+            ? "memory"
+            : Path.GetFileNameWithoutExtension(builder.DataSource);
+
+        // Verify JSON support and detect JSONB with a temporary connection
+        using (var conn = CreateConnection())
+        {
+            EnableJsonSupport(conn);
+        }
+
+        // Initialize schema on first connection
+        EnsureSchemaInitialized();
+
+        _logger.LogInformation("Initialized database {DatabaseName}", _databaseName);
+    }
+
+    private static DocumentDatabaseOptions ValidateAndGetOptions(IOptions<DocumentDatabaseOptions> options)
     {
         if (options == null)
             throw new ArgumentNullException(nameof(options));
@@ -84,21 +108,29 @@ public class SqliteDocumentDatabase : IDocumentDatabase
             throw new ArgumentException("Options value cannot be null.", nameof(options));
 
         optionsValue.Validate();
-        return optionsValue.ConnectionString!;
+        return optionsValue;
     }
 
     /// <inheritdoc/>
-    public IDocumentCollection<T> GetCollection<T>(string name) where T : class
+    public async Task<IDocumentCollection<T>> GetCollectionAsync<T>(string name) where T : class
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Collection name cannot be null or empty.", nameof(name));
 
-        return (IDocumentCollection<T>)_collections.GetOrAdd(name, _ =>
+        var collection = (IDocumentCollection<T>)_collections.GetOrAdd(name, _ =>
         {
-            var collection = new SqliteDocumentCollection<T>(this, name, _logger);
-            CreateCollectionInternal<T>(name);
-            return collection;
+            var baseCollection = new SqliteDocumentCollection<T>(this, name, _logger, _supportsJsonB);
+
+            var useCache = _options.CachedCollectionPredicates.Any(x => x(name));
+            if (useCache)
+                return new CachedDocumentCollection<T>(baseCollection);
+
+            return baseCollection;
         });
+
+        await CreateCollectionInternalAsync<T>(name);
+
+        return collection;
     }
 
     /// <inheritdoc/>
@@ -114,7 +146,10 @@ public class SqliteDocumentDatabase : IDocumentDatabase
             INSERT OR IGNORE INTO collections (name, created_at)
             VALUES (@Name, @CreatedAt);";
 
-        await _connection.ExecuteAsync(insertSql, new { Name = name, CreatedAt = now });
+        using (var connection = CreateConnection())
+        {
+            await connection.ExecuteAsync(insertSql, new { Name = name, CreatedAt = now });
+        }
 
         _logger.LogInformation("Created collection {CollectionName}", name);
     }
@@ -127,7 +162,11 @@ public class SqliteDocumentDatabase : IDocumentDatabase
 
         // Delete from collections table (cascade will handle documents, indexes, and indexed_values)
         var deleteSql = "DELETE FROM collections WHERE name = @Name;";
-        await _connection.ExecuteAsync(deleteSql, new { Name = name });
+
+        using (var connection = CreateConnection())
+        {
+            await connection.ExecuteAsync(deleteSql, new { Name = name });
+        }
 
         _collections.TryRemove(name, out _);
 
@@ -138,19 +177,15 @@ public class SqliteDocumentDatabase : IDocumentDatabase
     public async Task<List<string>> ListCollectionNamesAsync()
     {
         var sql = "SELECT name FROM collections ORDER BY name;";
-        var collectionNames = await _connection.QueryAsync<string>(sql);
-        return new List<string>(collectionNames);
+
+        using (var connection = CreateConnection())
+        {
+            var collectionNames = await connection.QueryAsync<string>(sql);
+            return new List<string>(collectionNames);
+        }
     }
 
-    /// <inheritdoc/>
-    public Task<IDocumentTransaction> BeginTransactionAsync()
-    {
-        var transaction = _connection.BeginTransaction();
-        _logger.LogDebug("Transaction started");
-        return Task.FromResult<IDocumentTransaction>(new SqliteDocumentTransaction(transaction));
-    }
-
-    private void CreateCollectionInternal<T>(string name) where T : class
+    private async Task CreateCollectionInternalAsync<T>(string name) where T : class
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Collection name cannot be null or empty.", nameof(name));
@@ -162,17 +197,53 @@ public class SqliteDocumentDatabase : IDocumentDatabase
             INSERT OR IGNORE INTO collections (name, created_at)
             VALUES (@Name, @CreatedAt);";
 
-        _connection.Execute(insertSql, new { Name = name, CreatedAt = now });
+        using (var connection = CreateConnection())
+        {
+            await connection.ExecuteAsync(insertSql, new { Name = name, CreatedAt = now });
+        }
 
         _logger.LogInformation("Created collection {CollectionName}", name);
     }
 
     /// <summary>
-    /// Gets the underlying SQLite connection (internal use).
+    /// Creates a new SQLite connection for the current operation (internal use).
     /// </summary>
-    internal SqliteConnection GetConnection() => _connection;
+    internal SqliteConnection CreateConnection()
+    {
+        var connection = new SqliteConnection(_options.ConnectionString);
+        connection.Open();
 
-    private void InitializeSchema()
+        // Apply pragmas to each connection
+        ApplyPragmas(connection);
+
+        return connection;
+    }
+
+    /// <summary>
+    /// Gets whether JSONB storage is enabled (internal use).
+    /// </summary>
+    internal bool IsJsonBEnabled() => _supportsJsonB;
+
+    private void EnsureSchemaInitialized()
+    {
+        if (_schemaInitialized)
+            return;
+
+        lock (_schemaLock)
+        {
+            if (_schemaInitialized)
+                return;
+
+            using (var connection = CreateConnection())
+            {
+                InitializeSchema(connection);
+            }
+
+            _schemaInitialized = true;
+        }
+    }
+
+    private void InitializeSchema(SqliteConnection connection)
     {
         // Create collections table
         var createCollectionsTable = @"
@@ -182,13 +253,14 @@ public class SqliteDocumentDatabase : IDocumentDatabase
                 created_at TEXT NOT NULL
             );";
 
-        // Create documents table
-        var createDocumentsTable = @"
+        // Create documents table with appropriate data type
+        var dataType = _supportsJsonB ? "BLOB" : "TEXT";
+        var createDocumentsTable = $@"
             CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 collection_id INTEGER NOT NULL,
                 document_id TEXT NOT NULL,
-                data TEXT NOT NULL,
+                data {dataType} NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 version INTEGER DEFAULT 1,
@@ -230,38 +302,72 @@ public class SqliteDocumentDatabase : IDocumentDatabase
             CREATE INDEX IF NOT EXISTS idx_indexed_values_lookup ON indexed_values(index_id, field_path, value_text);
             CREATE INDEX IF NOT EXISTS idx_indexed_values_number ON indexed_values(index_id, field_path, value_number);";
 
-        _connection.Execute(createCollectionsTable);
-        _connection.Execute(createDocumentsTable);
-        _connection.Execute(createIndexesTable);
-        _connection.Execute(createIndexedValuesTable);
-        _connection.Execute(createIndexes);
+        connection.Execute(createCollectionsTable);
+        connection.Execute(createDocumentsTable);
+        connection.Execute(createIndexesTable);
+        connection.Execute(createIndexedValuesTable);
+        connection.Execute(createIndexes);
 
         _logger.LogDebug("Centralized schema initialized");
     }
 
-    private void EnableJsonSupport()
+    private void ApplyPragmas(SqliteConnection connection)
+    {
+        // Apply journal mode
+        if (!string.IsNullOrWhiteSpace(_options.JournalMode))
+        {
+            var journalSql = $"PRAGMA journal_mode = {_options.JournalMode};";
+            connection.Execute(journalSql);
+            _logger.LogDebug("Applied PRAGMA journal_mode = {JournalMode}", _options.JournalMode);
+        }
+
+        // Apply page size (must be set before any tables are created)
+        if (_options.PageSize.HasValue)
+        {
+            var pageSizeSql = $"PRAGMA page_size = {_options.PageSize.Value};";
+            connection.Execute(pageSizeSql);
+            _logger.LogDebug("Applied PRAGMA page_size = {PageSize}", _options.PageSize.Value);
+        }
+
+        // Apply synchronous mode
+        if (!string.IsNullOrWhiteSpace(_options.Synchronous))
+        {
+            var syncSql = $"PRAGMA synchronous = {_options.Synchronous};";
+            connection.Execute(syncSql);
+            _logger.LogDebug("Applied PRAGMA synchronous = {Synchronous}", _options.Synchronous);
+        }
+    }
+
+    private void EnableJsonSupport(SqliteConnection connection)
     {
         // SQLite has built-in JSON support, no additional setup needed
         // Just verify it's available
-        var result = _connection.QuerySingle<int>("SELECT json_valid('{\"test\": true}');");
+        var result = connection.QuerySingle<int>("SELECT json_valid('{\"test\": true}');");
         if (result != 1)
         {
             throw new InvalidOperationException("SQLite JSON support is not available.");
         }
 
-        _logger.LogDebug("JSON support enabled");
+        // Set JSONB support based on user preference
+        _supportsJsonB = UseJsonB;
+
+        if (_supportsJsonB)
+        {
+            _logger.LogInformation("JSONB storage enabled");
+        }
+        else
+        {
+            _logger.LogDebug("JSON text storage enabled");
+        }
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        if (_disposed)
-            return;
+        // No persistent connection to dispose
+        // Connections are created and disposed per-operation
 
-        _connection?.Dispose();
-        _disposed = true;
-
-        _logger.LogInformation("Database connection closed");
+        _logger.LogInformation("Database instance disposed");
 
         GC.SuppressFinalize(this);
     }

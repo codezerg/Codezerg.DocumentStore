@@ -20,46 +20,40 @@ public interface IDocumentCollection<T> where T : class
     /// Inserts a single document into the collection.
     /// </summary>
     /// <param name="document">The document to insert.</param>
-    /// <param name="transaction">Optional transaction.</param>
-    Task InsertOneAsync(T document, IDocumentTransaction? transaction = null);
+    Task InsertOneAsync(T document);
 
     /// <summary>
     /// Inserts multiple documents into the collection.
     /// </summary>
     /// <param name="documents">The documents to insert.</param>
-    /// <param name="transaction">Optional transaction.</param>
-    Task InsertManyAsync(IEnumerable<T> documents, IDocumentTransaction? transaction = null);
+    Task InsertManyAsync(IEnumerable<T> documents);
 
     /// <summary>
     /// Finds a document by its ID.
     /// </summary>
     /// <param name="id">The document ID.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>The document if found, null otherwise.</returns>
-    Task<T?> FindByIdAsync(DocumentId id, IDocumentTransaction? transaction = null);
+    Task<T?> FindByIdAsync(DocumentId id);
 
     /// <summary>
     /// Finds a single document matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>The first matching document, or null if not found.</returns>
-    Task<T?> FindOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null);
+    Task<T?> FindOneAsync(Expression<Func<T, bool>> filter);
 
     /// <summary>
     /// Finds all documents matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>A list of matching documents.</returns>
-    Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null);
+    Task<List<T>> FindAsync(Expression<Func<T, bool>> filter);
 
     /// <summary>
     /// Finds all documents in the collection.
     /// </summary>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>A list of all documents.</returns>
-    Task<List<T>> FindAllAsync(IDocumentTransaction? transaction = null);
+    Task<List<T>> FindAllAsync();
 
     /// <summary>
     /// Finds documents with pagination support.
@@ -67,83 +61,73 @@ public interface IDocumentCollection<T> where T : class
     /// <param name="filter">The filter expression.</param>
     /// <param name="skip">Number of documents to skip.</param>
     /// <param name="limit">Maximum number of documents to return.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>A list of matching documents.</returns>
-    Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit, IDocumentTransaction? transaction = null);
+    Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit);
 
     /// <summary>
     /// Counts documents matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>The count of matching documents.</returns>
-    Task<long> CountAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null);
+    Task<long> CountAsync(Expression<Func<T, bool>> filter);
 
     /// <summary>
     /// Counts all documents in the collection.
     /// </summary>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>The total count of documents.</returns>
-    Task<long> CountAllAsync(IDocumentTransaction? transaction = null);
+    Task<long> CountAllAsync();
 
     /// <summary>
     /// Updates a single document by its ID.
     /// </summary>
     /// <param name="id">The document ID.</param>
     /// <param name="document">The updated document.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>True if the document was updated, false if not found.</returns>
-    Task<bool> UpdateByIdAsync(DocumentId id, T document, IDocumentTransaction? transaction = null);
+    Task<bool> UpdateByIdAsync(DocumentId id, T document);
 
     /// <summary>
     /// Updates a single document matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
     /// <param name="document">The updated document.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>True if a document was updated, false otherwise.</returns>
-    Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document, IDocumentTransaction? transaction = null);
+    Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document);
 
     /// <summary>
     /// Updates multiple documents matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
     /// <param name="updateAction">An action to update each matching document.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>The number of documents updated.</returns>
-    Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction, IDocumentTransaction? transaction = null);
+    Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction);
 
     /// <summary>
     /// Deletes a single document by its ID.
     /// </summary>
     /// <param name="id">The document ID.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>True if the document was deleted, false if not found.</returns>
-    Task<bool> DeleteByIdAsync(DocumentId id, IDocumentTransaction? transaction = null);
+    Task<bool> DeleteByIdAsync(DocumentId id);
 
     /// <summary>
     /// Deletes a single document matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>True if a document was deleted, false otherwise.</returns>
-    Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null);
+    Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter);
 
     /// <summary>
     /// Deletes all documents matching the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>The number of documents deleted.</returns>
-    Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null);
+    Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter);
 
     /// <summary>
     /// Checks if any document matches the filter.
     /// </summary>
     /// <param name="filter">The filter expression.</param>
-    /// <param name="transaction">Optional transaction.</param>
     /// <returns>True if any document matches, false otherwise.</returns>
-    Task<bool> AnyAsync(Expression<Func<T, bool>> filter, IDocumentTransaction? transaction = null);
+    Task<bool> AnyAsync(Expression<Func<T, bool>> filter);
 
     /// <summary>
     /// Creates an index on the specified field.

@@ -15,7 +15,7 @@ public interface IDocumentDatabase : IDisposable
     /// <typeparam name="T">The document type.</typeparam>
     /// <param name="name">The collection name.</param>
     /// <returns>A collection instance.</returns>
-    IDocumentCollection<T> GetCollection<T>(string name) where T : class;
+    Task<IDocumentCollection<T>> GetCollectionAsync<T>(string name) where T : class;
 
     /// <summary>
     /// Creates a new collection if it doesn't exist.
@@ -35,12 +35,6 @@ public interface IDocumentDatabase : IDisposable
     /// </summary>
     /// <returns>A list of collection names.</returns>
     Task<List<string>> ListCollectionNamesAsync();
-
-    /// <summary>
-    /// Begins a new transaction.
-    /// </summary>
-    /// <returns>A transaction instance.</returns>
-    Task<IDocumentTransaction> BeginTransactionAsync();
 
     /// <summary>
     /// Gets the database name.

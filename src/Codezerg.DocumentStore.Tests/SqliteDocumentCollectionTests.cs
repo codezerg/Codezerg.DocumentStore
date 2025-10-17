@@ -3,20 +3,31 @@ using Codezerg.DocumentStore.Exceptions;
 
 namespace Codezerg.DocumentStore.Tests;
 
-public class SqliteDocumentCollectionTests : IDisposable
+public class SqliteDocumentCollectionTests : IAsyncLifetime
 {
+    private readonly string _dbFile;
     private readonly SqliteDocumentDatabase _database;
-    private readonly IDocumentCollection<TestUser> _users;
+    private IDocumentCollection<TestUser> _users = null!;
 
     public SqliteDocumentCollectionTests()
     {
-        _database = new SqliteDocumentDatabase("Data Source=:memory:");
-        _users = _database.GetCollection<TestUser>("users");
+        _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
+        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}");
     }
 
-    public void Dispose()
+    public async Task InitializeAsync()
+    {
+        _users = await _database.GetCollectionAsync<TestUser>("users");
+    }
+
+    public Task DisposeAsync()
     {
         _database?.Dispose();
+        if (File.Exists(_dbFile))
+        {
+            try { File.Delete(_dbFile); } catch { }
+        }
+        return Task.CompletedTask;
     }
 
     [Fact]
