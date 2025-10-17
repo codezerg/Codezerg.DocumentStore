@@ -1,17 +1,15 @@
 # Codezerg.DocumentStore
 
-A document-oriented data layer for SQLite that provides flexible, schema-less storage with full .NET embedding. Store and query JSON documents with the simplicity and portability of SQLite.
+Document-oriented data layer for SQLite. Store and query JSON documents with LINQ support.
 
 ## Features
 
-- **Document-oriented storage**: Store POCOs as JSON documents without predefined schemas
-- **LINQ query support**: Write type-safe queries that translate to SQLite JSON operations
-- **Indexing**: Create regular and unique indexes on document properties for fast lookups
-- **Transactions**: Full ACID transaction support across multiple collections
-- **Unique document IDs**: Built-in DocumentId type with timestamp ordering and uniqueness
-- **Automatic timestamps**: Optional CreatedAt/UpdatedAt tracking
-- **SQLite powered**: Leverages SQLite's JSON capabilities for reliability and portability
-- **.NET Standard 2.0**: Compatible with .NET Framework, .NET Core, and .NET 5+
+- **Document storage**: Store POCOs as JSON documents without predefined schemas
+- **LINQ queries**: Type-safe queries translated to SQLite JSON operations
+- **Indexing**: Regular and unique indexes for fast lookups
+- **Transactions**: ACID transaction support across collections
+- **DocumentId**: 12-byte unique identifier with timestamp ordering
+- **.NET Standard 2.0**: Broad compatibility across .NET platforms
 
 ## Installation
 
@@ -45,10 +43,7 @@ public class Address
 ```csharp
 using Codezerg.DocumentStore;
 
-// Create or open a database with a connection string
 using var db = new SqliteDocumentDatabase("Data Source=myapp.db");
-
-// Get a collection (created automatically if it doesn't exist)
 var users = db.GetCollection<User>("users");
 ```
 
@@ -67,49 +62,34 @@ var user = new User
     }
 };
 
-users.Insert(user);
-// user.Id is now automatically assigned
+users.Insert(user);  // Id is auto-assigned
 ```
 
 ### 4. Query documents
 
 ```csharp
-// Find by ID
 var user = users.FindById(userId);
-
-// Find with LINQ expressions
 var adults = users.Find(u => u.Age >= 18);
 var seattleUsers = users.Find(u => u.Address.City == "Seattle");
 var gmailUsers = users.Find(u => u.Email.Contains("@gmail.com"));
-
-// Complex queries
 var results = users.Find(u => u.Age > 25 && u.Address.State == "WA");
-
-// Pagination
 var page = users.Find(u => u.Age > 0, skip: 10, limit: 20);
-
-// Get all documents
 var allUsers = users.FindAll();
 ```
 
 ### 5. Update and delete
 
 ```csharp
-// Update a document
 user.Age = 31;
 users.Update(user);
 
-// Delete a document
 users.Delete(user.Id);
 ```
 
 ### 6. Create indexes
 
 ```csharp
-// Regular index for faster queries
 users.CreateIndex(u => u.Email);
-
-// Unique index to enforce uniqueness
 users.CreateIndex(u => u.Email, unique: true);
 ```
 
@@ -124,39 +104,24 @@ var orders = transaction.GetCollection<Order>("orders");
 users.Insert(newUser);
 orders.Insert(newOrder);
 
-transaction.Commit();  // Atomically commit both operations
+transaction.Commit();
 ```
 
 ## Advanced Usage
 
 ### In-Memory Databases
 
-Perfect for testing:
-
 ```csharp
-// Direct instantiation
 using var db = new SqliteDocumentDatabase("Data Source=:memory:");
 var users = db.GetCollection<User>("users");
-// Use as normal - data is kept in memory
 ```
 
 ### Dependency Injection
 
-Use the extension method to register the database in your DI container:
-
 ```csharp
-using Codezerg.DocumentStore;
-using Microsoft.Extensions.DependencyInjection;
-
-// Register with connection string
 services.AddDocumentDatabase(options =>
     options.UseConnectionString("Data Source=myapp.db"));
 
-// For in-memory databases
-services.AddDocumentDatabase(options =>
-    options.UseConnectionString("Data Source=:memory:"));
-
-// Then inject IDocumentDatabase
 public class MyService
 {
     private readonly IDocumentDatabase _database;
@@ -171,35 +136,21 @@ public class MyService
 ### Working with DocumentId
 
 ```csharp
-// Parse from string
 var id = DocumentId.Parse("507f1f77bcf86cd799439011");
-
-// Get timestamp
 DateTime timestamp = id.Timestamp;
-
-// Generate new ID
 var newId = DocumentId.NewId();
-
-// Convert to string
 string idString = id.ToString();
 ```
 
 ### Collection Management
 
 ```csharp
-// List all collections
 var collections = db.GetCollectionNames();
-
-// Drop a collection
 db.DropCollection("users");
-
-// Check if collection exists
 bool exists = db.GetCollectionNames().Contains("users");
 ```
 
 ## Query Translation
-
-LINQ expressions are automatically translated to SQLite JSON queries:
 
 | C# Expression | SQLite Translation |
 |--------------|-------------------|
@@ -211,56 +162,23 @@ LINQ expressions are automatically translated to SQLite JSON queries:
 
 ## Development
 
-Build the solution:
 ```bash
 dotnet build
-```
-
-Run tests:
-```bash
 dotnet test
-```
-
-Run the sample application:
-```bash
 dotnet run --project samples/SampleApp/SampleApp.csproj
-```
-
-Create NuGet package:
-```bash
 dotnet pack -c Release
 ```
 
 ## Architecture
 
-### Database Schema
-
-The library uses four main SQLite tables:
-- **collections**: Collection metadata
-- **documents**: JSON document storage
-- **indexes**: Index definitions
-- **indexed_values**: Extracted values for indexed properties
-
-All tables use cascading deletes to maintain referential integrity.
-
 ### DocumentId Format
 
-12-byte unique identifier:
-- 4 bytes: Unix timestamp (enables chronological sorting)
-- 5 bytes: Random value
-- 3 bytes: Incrementing counter
+12-byte unique identifier (4-byte timestamp + 5-byte random + 3-byte counter) providing temporal ordering and uniqueness without database round-trips.
 
-This provides temporal ordering and uniqueness without database round-trips.
+### Database Schema
 
-## Requirements
+Four tables: `collections`, `documents`, `indexes`, `indexed_values` with cascading deletes.
 
-- .NET Standard 2.0 or higher
-- SQLite 3.9.0 or higher (for JSON support)
+## License
 
-## Dependencies
-
-- Microsoft.Data.Sqlite
-- Dapper
-- System.Text.Json
-- Microsoft.Extensions.Logging.Abstractions
-- Polly
+MIT
