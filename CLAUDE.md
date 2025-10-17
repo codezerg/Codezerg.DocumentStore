@@ -17,7 +17,6 @@ Codezerg.DocumentStore is a document-oriented data layer for SQLite that provide
 - Microsoft.Extensions.Logging.Abstractions 9.0.10
 - Microsoft.Extensions.DependencyInjection.Abstractions 9.0.10
 - Microsoft.Extensions.Options 9.0.10
-- Polly 8.6.4
 
 ## Recent Changes
 
