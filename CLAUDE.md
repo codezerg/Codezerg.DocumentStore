@@ -8,7 +8,28 @@ Codezerg.DocumentStore is a document-oriented data layer for SQLite that provide
 
 **Target Framework**: .NET Standard 2.0 (main library), .NET 9.0 (tests and samples)
 
-**Key Dependencies**: Microsoft.Data.Sqlite, Dapper, System.Text.Json, Microsoft.Extensions.Logging.Abstractions, Microsoft.Extensions.DependencyInjection.Abstractions, Microsoft.Extensions.Options, Polly
+**Package Version**: 1.0.0
+
+**Key Dependencies**:
+- Microsoft.Data.Sqlite 9.0.10
+- Dapper 2.1.66
+- System.Text.Json 9.0.10
+- Microsoft.Extensions.Logging.Abstractions 9.0.10
+- Microsoft.Extensions.DependencyInjection.Abstractions 9.0.10
+- Microsoft.Extensions.Options 9.0.10
+- Polly 8.6.4
+
+## Recent Changes
+
+The following recent changes have been made to the codebase (per git history):
+
+- **8d85989**: Remove benchmarks and obsolete documentation
+- **dd4e3d3**: Remove BinaryDocumentSerializer and update benchmarks
+- **dda2f9f**: Add benchmarks project and update documentation
+- **4a8771b**: Add experimental BinaryDocumentSerializer and benchmarks
+- **bd45e26**: Add DI support and refactor database constructors
+
+**Note**: The benchmarks project and SQLITE_JSONB_REFERENCE.md documentation have been removed from the repository. The current implementation uses standard JSON text storage via SQLite's json_extract functions.
 
 ## Build and Test Commands
 
@@ -247,17 +268,49 @@ The QueryTranslator has specific limitations:
 - Collections share the same connection instance
 - Transactions use the same connection to ensure ACID properties
 
-## Additional Resources
+## Project Structure
 
-### SQLite JSONB Binary Format
+```
+Codezerg.DocumentStore/
+├── src/
+│   ├── Codezerg.DocumentStore/              (Main Library - .NET Standard 2.0)
+│   │   ├── SqliteDocumentDatabase.cs        (250 lines)
+│   │   ├── SqliteDocumentCollection.cs      (492 lines)
+│   │   ├── SqliteDocumentTransaction.cs     (69 lines)
+│   │   ├── QueryTranslator.cs               (232 lines)
+│   │   ├── DocumentId.cs                    (175 lines)
+│   │   ├── IDocumentDatabase.cs             (53 lines)
+│   │   ├── IDocumentCollection.cs           (159 lines)
+│   │   ├── IDocumentTransaction.cs          (26 lines)
+│   │   ├── ServiceCollectionExtensions.cs   (46 lines)
+│   │   ├── Compat.cs                        (81 lines)
+│   │   ├── Configuration/
+│   │   │   ├── DocumentDatabaseOptions.cs
+│   │   │   └── DocumentDatabaseOptionsBuilder.cs
+│   │   ├── Serialization/
+│   │   │   ├── DocumentSerializer.cs
+│   │   │   └── DocumentIdJsonConverter.cs
+│   │   └── Exceptions/
+│   │       ├── DocumentNotFoundException.cs
+│   │       ├── DuplicateKeyException.cs
+│   │       └── InvalidQueryException.cs
+│   │
+│   └── Codezerg.DocumentStore.Tests/        (Test Suite - .NET 9.0)
+│       ├── SqliteDocumentDatabaseTests.cs   (129 lines)
+│       ├── SqliteDocumentCollectionTests.cs (422 lines)
+│       ├── DocumentIdTests.cs               (140 lines)
+│       └── TransactionTests.cs              (231 lines)
+│
+└── samples/
+    └── SampleApp/                           (.NET 9.0)
+        └── Program.cs                       (Comprehensive examples)
+```
 
-For information about SQLite's binary JSON format (JSONB) and potential future optimization strategies, see:
+## Test Coverage
 
-**[docs/SQLITE_JSONB_REFERENCE.md](docs/SQLITE_JSONB_REFERENCE.md)** - Comprehensive reference covering:
-- JSONB binary encoding format and performance benefits
-- SQL function reference for JSONB operations
-- Migration strategies from JSON text to JSONB
-- Version detection and compatibility requirements (SQLite 3.45.0+)
-- Implementation examples for Codezerg.DocumentStore
+The test suite includes 922 lines of comprehensive tests across four test files:
 
-This document provides detailed guidance for potentially migrating from JSON text storage to JSONB binary format for improved performance (approximately 50% CPU reduction according to SQLite benchmarks).
+- **SqliteDocumentDatabaseTests.cs** (129 lines): Database creation, collection management, transaction initialization
+- **SqliteDocumentCollectionTests.cs** (422 lines): CRUD operations, queries, indexes, pagination, complex filters
+- **DocumentIdTests.cs** (140 lines): ID generation, parsing, comparison, equality, timestamp validation
+- **TransactionTests.cs** (231 lines): Transaction commit/rollback, multi-collection atomicity, error handling
