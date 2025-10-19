@@ -1,6 +1,4 @@
 using System;
-using System.Security.Cryptography;
-using System.Threading;
 
 namespace Codezerg.DocumentStore;
 
@@ -9,7 +7,6 @@ namespace Codezerg.DocumentStore;
 /// </summary>
 public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<DocumentId>
 {
-    private static int _counter = Compatibility.GetRandomInt32(0, 0xFFFFFF);
     private readonly byte[] _value;
 
     /// <summary>
@@ -22,7 +19,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// </summary>
     public DocumentId()
     {
-        _value = Generate();
+        _value = ObjectId.Generate();
     }
 
     /// <summary>
@@ -46,23 +43,13 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
         if (string.IsNullOrEmpty(hexString) || hexString.Length != 24)
             throw new ArgumentException("DocumentId hex string must be exactly 24 characters", nameof(hexString));
 
-        _value = Compatibility.FromHexString(hexString);
+        _value = ObjectId.FromHexString(hexString);
     }
 
     /// <summary>
     /// Gets the timestamp component of this DocumentId.
     /// </summary>
-    public DateTime Timestamp
-    {
-        get
-        {
-            if (_value == null || _value.Length != 12)
-                return DateTime.MinValue;
-
-            var timestamp = _value[0] << 24 | _value[1] << 16 | _value[2] << 8 | _value[3];
-            return DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
-        }
-    }
+    public DateTime Timestamp => ObjectId.GetCreationTime(_value);
 
     /// <summary>
     /// Generates a new DocumentId.
@@ -101,7 +88,7 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// <summary>
     /// Converts the DocumentId to a hex string.
     /// </summary>
-    public override string ToString() => _value == null ? string.Empty : Compatibility.ToHexString(_value);
+    public override string ToString() => _value == null ? string.Empty : ObjectId.ToHexString(_value);
 
     /// <summary>
     /// Gets the byte array representation of this DocumentId.
@@ -112,39 +99,13 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     public override bool Equals(object? obj) => obj is DocumentId id && Equals(id);
 
     /// <inheritdoc/>
-    public bool Equals(DocumentId other)
-    {
-        if (_value == null && other._value == null) return true;
-        if (_value == null || other._value == null) return false;
-        if (_value.Length != other._value.Length) return false;
-
-        for (int i = 0; i < _value.Length; i++)
-        {
-            if (_value[i] != other._value[i]) return false;
-        }
-        return true;
-    }
+    public bool Equals(DocumentId other) => ObjectId.BytesEqual(_value, other._value);
 
     /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        return Compatibility.GetHashCodeForBytes(_value);
-    }
+    public override int GetHashCode() => ObjectId.ComputeHashCode(_value);
 
     /// <inheritdoc/>
-    public int CompareTo(DocumentId other)
-    {
-        if (_value == null && other._value == null) return 0;
-        if (_value == null) return -1;
-        if (other._value == null) return 1;
-
-        for (int i = 0; i < Math.Min(_value.Length, other._value.Length); i++)
-        {
-            var cmp = _value[i].CompareTo(other._value[i]);
-            if (cmp != 0) return cmp;
-        }
-        return _value.Length.CompareTo(other._value.Length);
-    }
+    public int CompareTo(DocumentId other) => ObjectId.BytesCompare(_value, other._value);
 
     /// <summary>
     /// Determines whether two DocumentId instances are equal.
@@ -175,27 +136,4 @@ public readonly struct DocumentId : IEquatable<DocumentId>, IComparable<Document
     /// Determines whether one DocumentId is greater than or equal to another.
     /// </summary>
     public static bool operator >=(DocumentId left, DocumentId right) => left.CompareTo(right) >= 0;
-
-    private static byte[] Generate()
-    {
-        var bytes = new byte[12];
-
-        // Timestamp (4 bytes)
-        var timestamp = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        bytes[0] = (byte)(timestamp >> 24);
-        bytes[1] = (byte)(timestamp >> 16);
-        bytes[2] = (byte)(timestamp >> 8);
-        bytes[3] = (byte)timestamp;
-
-        // Random value (5 bytes)
-        Compatibility.FillRandom(bytes, 4, 5);
-
-        // Counter (3 bytes)
-        var counter = Interlocked.Increment(ref _counter) & 0xFFFFFF;
-        bytes[9] = (byte)(counter >> 16);
-        bytes[10] = (byte)(counter >> 8);
-        bytes[11] = (byte)counter;
-
-        return bytes;
-    }
 }
