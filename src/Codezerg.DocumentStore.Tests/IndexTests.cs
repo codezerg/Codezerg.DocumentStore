@@ -1,5 +1,4 @@
 using Codezerg.DocumentStore;
-using Codezerg.DocumentStore.Exceptions;
 using Microsoft.Data.Sqlite;
 
 namespace Codezerg.DocumentStore.Tests;
@@ -141,7 +140,7 @@ public class IndexTests : IAsyncLifetime
 
         await _products.InsertOneAsync(new TestProduct { Sku = "WID-001", Name = "Widget" });
 
-        await Assert.ThrowsAsync<DuplicateKeyException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _products.InsertOneAsync(new TestProduct { Sku = "WID-001", Name = "Different Widget" }));
     }
 
@@ -345,11 +344,11 @@ public class IndexTests : IAsyncLifetime
         });
 
         // Duplicate SKU should fail
-        await Assert.ThrowsAsync<DuplicateKeyException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _products.InsertOneAsync(new TestProduct { Sku = "SKU-001", Barcode = "BAR-002" }));
 
         // Duplicate Barcode should fail
-        await Assert.ThrowsAsync<DuplicateKeyException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _products.InsertOneAsync(new TestProduct { Sku = "SKU-002", Barcode = "BAR-001" }));
     }
 
@@ -398,7 +397,7 @@ public class IndexTests : IAsyncLifetime
         await _products.CreateIndexAsync(p => p.Sku, unique: true);
 
         // Should still enforce uniqueness
-        await Assert.ThrowsAsync<DuplicateKeyException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _products.InsertOneAsync(new TestProduct { Name = "Duplicate", Sku = "WID-001" }));
     }
 

@@ -1,5 +1,4 @@
 using Codezerg.DocumentStore;
-using Codezerg.DocumentStore.Exceptions;
 
 namespace Codezerg.DocumentStore.Tests;
 
@@ -50,7 +49,7 @@ public class SqliteDocumentCollectionTests : IAsyncLifetime
 
         var user2 = new TestUser { Id = user1.Id, Name = "Bob", Age = 25 };
 
-        await Assert.ThrowsAsync<DuplicateKeyException>(() => _users.InsertOneAsync(user2));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _users.InsertOneAsync(user2));
     }
 
     [Fact]
@@ -358,7 +357,7 @@ public class SqliteDocumentCollectionTests : IAsyncLifetime
         await _users.InsertOneAsync(new TestUser { Name = "Alice", Age = 30 });
 
         // This should fail due to unique constraint
-        await Assert.ThrowsAsync<DuplicateKeyException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _users.InsertOneAsync(new TestUser { Name = "Alice", Age = 25 }));
     }
 

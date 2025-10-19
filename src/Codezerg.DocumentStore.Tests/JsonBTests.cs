@@ -173,7 +173,7 @@ public class JsonBTests : IAsyncLifetime
         await _collection.InsertOneAsync(doc1);
 
         var doc2 = new TestDocument { Name = "User2", Email = "unique@example.com" };
-        await Assert.ThrowsAsync<Exceptions.DuplicateKeyException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _collection.InsertOneAsync(doc2));
     }
 

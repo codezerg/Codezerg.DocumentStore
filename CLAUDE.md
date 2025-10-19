@@ -196,6 +196,13 @@ services.AddDocumentDatabase(options =>
            .CacheCollections(name => name.StartsWith("cache_")));
 ```
 
+### Error Handling
+
+The library uses standard .NET exceptions for error conditions:
+- **InvalidOperationException**: Thrown when a unique index constraint is violated (duplicate key errors)
+- **NotSupportedException**: Thrown when a LINQ query expression cannot be translated to SQL
+- **ArgumentNullException**: Thrown when null arguments are passed to methods that require non-null values
+
 ## Key Implementation Files
 
 All source files are located in `src/Codezerg.DocumentStore/`:
@@ -225,10 +232,6 @@ All source files are located in `src/Codezerg.DocumentStore/`:
 - **DocumentSerializer.cs**: JSON serialization configuration with camelCase naming
 - **DocumentIdJsonConverter.cs**: Custom JSON converter for DocumentId type
 
-### Exceptions (`Exceptions/` subdirectory)
-- **DocumentNotFoundException.cs**: Thrown when a document is not found
-- **DuplicateKeyException.cs**: Thrown when a unique index constraint is violated
-- **InvalidQueryException.cs**: Thrown when a LINQ query cannot be translated
 
 ## Common Development Patterns
 
@@ -409,13 +412,9 @@ Codezerg.DocumentStore/
 │   │   ├── Configuration/
 │   │   │   ├── DocumentDatabaseOptions.cs
 │   │   │   └── DocumentDatabaseOptionsBuilder.cs
-│   │   ├── Serialization/
-│   │   │   ├── DocumentSerializer.cs
-│   │   │   └── DocumentIdJsonConverter.cs
-│   │   └── Exceptions/
-│   │       ├── DocumentNotFoundException.cs
-│   │       ├── DuplicateKeyException.cs
-│   │       └── InvalidQueryException.cs
+│   │   └── Serialization/
+│   │       ├── DocumentSerializer.cs
+│   │       └── DocumentIdJsonConverter.cs
 │   │
 │   └── Codezerg.DocumentStore.Tests/        (Test Suite - .NET 9.0)
 │       ├── SqliteDocumentDatabaseTests.cs

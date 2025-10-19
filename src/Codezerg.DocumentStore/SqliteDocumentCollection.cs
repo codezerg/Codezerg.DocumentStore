@@ -1,4 +1,3 @@
-using Codezerg.DocumentStore.Exceptions;
 using Codezerg.DocumentStore.Serialization;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -128,7 +127,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
                     transaction.Rollback();
                     // Try to determine which document caused the issue
                     var failedId = insertParams.FirstOrDefault().id;
-                    throw new DuplicateKeyException(failedId, _collectionName);
+                    throw new InvalidOperationException($"Duplicate key '{failedId}' in collection '{_collectionName}'.", ex);
                 }
                 catch
                 {
@@ -527,7 +526,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
             return ToCamelCase(member.Member.Name);
         }
 
-        throw new InvalidQueryException("Invalid field expression", fieldExpression.ToString());
+        throw new NotSupportedException($"Invalid field expression: {fieldExpression}");
     }
 
     private static string ToCamelCase(string str)

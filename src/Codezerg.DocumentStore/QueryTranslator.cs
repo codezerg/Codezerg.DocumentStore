@@ -1,4 +1,3 @@
-using Codezerg.DocumentStore.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
@@ -55,7 +54,7 @@ internal class QueryTranslator
                 VisitUnary(unary);
                 break;
             default:
-                throw new InvalidQueryException($"Unsupported expression type: {expression.GetType().Name}", expression.ToString());
+                throw new NotSupportedException($"Unsupported expression type: {expression.GetType().Name}. Expression: {expression}");
         }
     }
 
@@ -75,7 +74,7 @@ internal class QueryTranslator
             ExpressionType.LessThanOrEqual => " <= ",
             ExpressionType.AndAlso => " AND ",
             ExpressionType.OrElse => " OR ",
-            _ => throw new InvalidQueryException($"Unsupported binary operator: {binary.NodeType}", binary.ToString())
+            _ => throw new NotSupportedException($"Unsupported binary operator: {binary.NodeType}. Expression: {binary}")
         };
 
         _whereClause.Append(op);
@@ -153,7 +152,7 @@ internal class QueryTranslator
         }
         else
         {
-            throw new InvalidQueryException($"Unsupported method: {method.Method.Name}", method.ToString());
+            throw new NotSupportedException($"Unsupported method: {method.Method.Name}. Expression: {method}");
         }
     }
 
@@ -171,7 +170,7 @@ internal class QueryTranslator
         }
         else
         {
-            throw new InvalidQueryException($"Unsupported unary operator: {unary.NodeType}", unary.ToString());
+            throw new NotSupportedException($"Unsupported unary operator: {unary.NodeType}. Expression: {unary}");
         }
     }
 
