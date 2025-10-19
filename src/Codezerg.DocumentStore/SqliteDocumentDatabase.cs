@@ -1,13 +1,14 @@
 using Codezerg.DocumentStore.Caching;
 using Codezerg.DocumentStore.Configuration;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -81,10 +82,7 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         _logger = logger ?? NullLogger<SqliteDocumentDatabase>.Instance;
 
         // Extract database name from connection string or file path
-        var builder = new SqliteConnectionStringBuilder(_options.ConnectionString);
-        _databaseName = string.IsNullOrEmpty(builder.DataSource)
-            ? "memory"
-            : Path.GetFileNameWithoutExtension(builder.DataSource);
+        _databaseName = ExtractDatabaseName(_options.ConnectionString);
 
         // Verify JSON support and detect JSONB with a temporary connection
         using (var conn = CreateConnection())
@@ -206,11 +204,16 @@ public class SqliteDocumentDatabase : IDocumentDatabase
     }
 
     /// <summary>
-    /// Creates a new SQLite connection for the current operation (internal use).
+    /// Creates a new database connection for the current operation (internal use).
     /// </summary>
-    internal SqliteConnection CreateConnection()
+    internal DbConnection CreateConnection()
     {
-        var connection = new SqliteConnection(_options.ConnectionString);
+        var factory = DbProviderFactories.GetFactory(_options.ProviderName);
+        var connection = factory.CreateConnection();
+        if (connection == null)
+            throw new InvalidOperationException($"Failed to create connection from provider '{_options.ProviderName}'.");
+
+        connection.ConnectionString = _options.ConnectionString;
         connection.Open();
 
         // Apply pragmas to each connection
@@ -243,7 +246,7 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         }
     }
 
-    private void InitializeSchema(SqliteConnection connection)
+    private void InitializeSchema(DbConnection connection)
     {
         // Create collections table
         var createCollectionsTable = @"
@@ -311,7 +314,7 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         _logger.LogDebug("Centralized schema initialized");
     }
 
-    private void ApplyPragmas(SqliteConnection connection)
+    private void ApplyPragmas(DbConnection connection)
     {
         // Apply journal mode
         if (!string.IsNullOrWhiteSpace(_options.JournalMode))
@@ -338,7 +341,7 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         }
     }
 
-    private void EnableJsonSupport(SqliteConnection connection)
+    private void EnableJsonSupport(DbConnection connection)
     {
         // SQLite has built-in JSON support, no additional setup needed
         // Just verify it's available
@@ -359,6 +362,34 @@ public class SqliteDocumentDatabase : IDocumentDatabase
         {
             _logger.LogDebug("JSON text storage enabled");
         }
+    }
+
+    /// <summary>
+    /// Extracts the database name from a connection string.
+    /// </summary>
+    private static string ExtractDatabaseName(string connectionString)
+    {
+        // Try to extract Data Source from connection string
+        var dataSourceKey = "Data Source=";
+        var idx = connectionString.IndexOf(dataSourceKey, StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            var start = idx + dataSourceKey.Length;
+            var end = connectionString.IndexOf(';', start);
+            var dataSource = end >= 0
+                ? connectionString.Substring(start, end - start).Trim()
+                : connectionString.Substring(start).Trim();
+
+            // Handle :memory: databases
+            if (string.IsNullOrEmpty(dataSource) || dataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase))
+                return "memory";
+
+            // Extract filename without extension
+            return Path.GetFileNameWithoutExtension(dataSource);
+        }
+
+        // Fallback to generic name if Data Source not found
+        return "database";
     }
 
     /// <inheritdoc/>

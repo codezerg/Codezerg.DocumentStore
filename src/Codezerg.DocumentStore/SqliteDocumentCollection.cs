@@ -1,10 +1,10 @@
 using Codezerg.DocumentStore.Serialization;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
@@ -122,7 +122,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
                     transaction.Commit();
                 }
-                catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // SQLITE_CONSTRAINT
+                catch (DbException ex) when (IsConstraintViolation(ex))
                 {
                     transaction.Rollback();
                     // Try to determine which document caused the issue
@@ -545,5 +545,23 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
             dynamicParams.Add($"p{i}", parameters[i]);
         }
         return dynamicParams;
+    }
+
+    /// <summary>
+    /// Checks if a database exception represents a constraint violation.
+    /// This checks for common SQLite constraint error codes and messages.
+    /// </summary>
+    private static bool IsConstraintViolation(DbException ex)
+    {
+        // Check for SQLite CONSTRAINT error code (19)
+        // Most SQLite providers expose this via ErrorCode property
+        if (ex.ErrorCode == 19)
+            return true;
+
+        // Also check the message for constraint-related keywords as fallback
+        var message = ex.Message?.ToLowerInvariant() ?? string.Empty;
+        return message.Contains("constraint") ||
+               message.Contains("unique") ||
+               message.Contains("duplicate");
     }
 }

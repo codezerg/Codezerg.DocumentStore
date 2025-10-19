@@ -10,6 +10,20 @@ public class DocumentDatabaseOptionsBuilder
     private readonly DocumentDatabaseOptions _options = new();
 
     /// <summary>
+    /// Configures the ADO.NET provider name for the database connection.
+    /// </summary>
+    /// <param name="providerName">The ADO.NET provider name (e.g., "Microsoft.Data.Sqlite", "System.Data.SQLite").</param>
+    /// <returns>The builder for fluent chaining.</returns>
+    public DocumentDatabaseOptionsBuilder UseProviderName(string providerName)
+    {
+        if (string.IsNullOrWhiteSpace(providerName))
+            throw new ArgumentException("Provider name cannot be null or empty.", nameof(providerName));
+
+        _options.ProviderName = providerName;
+        return this;
+    }
+
+    /// <summary>
     /// Configures the database to use a specific connection string.
     /// </summary>
     /// <param name="connectionString">The SQLite connection string.</param>

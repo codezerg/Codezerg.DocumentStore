@@ -9,6 +9,12 @@ namespace Codezerg.DocumentStore.Configuration;
 public class DocumentDatabaseOptions
 {
     /// <summary>
+    /// Gets or sets the ADO.NET provider name for the database connection.
+    /// Default is "Microsoft.Data.Sqlite".
+    /// </summary>
+    public string ProviderName { get; set; } = "Microsoft.Data.Sqlite";
+
+    /// <summary>
     /// Gets or sets the connection string for the SQLite database.
     /// </summary>
     public string ConnectionString { get; set; } = null!;
