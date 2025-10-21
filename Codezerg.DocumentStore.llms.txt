@@ -6,17 +6,54 @@ DESCRIPTION: Full reference for document-oriented data layer for SQLite — flex
 ================================================
 NAMESPACE: Codezerg.DocumentStore
 ------------------------------------------------
-INTERFACE: IDocumentDatabase : IDisposable
+INTERFACE: ISqliteConnectionProvider
   PROPERTY:
+    - ProviderName : string
     - DatabaseName : string
     - ConnectionString : string
   METHODS:
-    - Task<IDocumentCollection<T>> GetCollectionAsync<T>(string name) where T : class
-    - Task CreateCollectionAsync<T>(string name) where T : class
+    - DbConnection CreateConnection()
+
+CLASS: SqliteConnectionProvider : ISqliteConnectionProvider
+  CTORS:
+    - SqliteConnectionProvider(IOptions<SqliteDatabaseOptions> options, ILogger<SqliteConnectionProvider>? logger=null)
+  PROPERTY (impl):
+    - ProviderName : string
+    - DatabaseName : string
+    - ConnectionString : string
+  METHODS (impl):
+    - DbConnection CreateConnection()
+  DETAILS:
+    - Uses DbProviderFactories to create connections for specified provider
+    - Supports "Microsoft.Data.Sqlite" (default) and "System.Data.SQLite" providers
+    - Applies SQLite pragmas to each connection: journal_mode, page_size, synchronous
+    - Connection-per-operation: Creates new connection, opens it, applies pragmas
+    - Extracts database name from connection string for display purposes
+
+INTERFACE: IDocument
+  PROPERTY:
+    - Id : DocumentId
+    - CreatedAt : DateTime
+    - UpdatedAt : DateTime
+  DETAILS:
+    - All document types must implement this interface
+    - Id is automatically assigned on insert if not set
+    - CreatedAt is automatically set when document is first inserted
+    - UpdatedAt is automatically updated on every save operation
+    - Provides type safety and eliminates reflection overhead
+
+INTERFACE: IDocumentDatabase
+  METHODS:
+    - Task<IDocumentCollection<T>> GetCollectionAsync<T>(string name) where T : class, IDocument
+    - Task CreateCollectionAsync<T>(string name) where T : class, IDocument
     - Task DropCollectionAsync(string name)
     - Task<List<string>> ListCollectionNamesAsync()
+  DETAILS:
+    - Does NOT implement IDisposable
+    - No persistent connections maintained (connection-per-operation pattern)
+    - Database instance can be used for the lifetime of the application
 
-INTERFACE: IDocumentCollection<T> where T : class
+INTERFACE: IDocumentCollection<T> where T : class, IDocument
   PROPERTY:
     - CollectionName : string
   METHODS (INSERT):
@@ -76,21 +113,14 @@ CLASS: DocumentId : IEquatable<DocumentId>, IComparable<DocumentId>
 
 CLASS: SqliteDocumentDatabase : IDocumentDatabase
   CTORS:
-    - SqliteDocumentDatabase(string connectionString, ILogger<SqliteDocumentDatabase>? logger=null, bool useJsonB=true)
-    - SqliteDocumentDatabase(IOptions<DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger=null)
-  PROPERTY (impl):
-    - DatabaseName : string
-    - ConnectionString : string
+    - SqliteDocumentDatabase(ISqliteConnectionProvider connectionProvider, IOptions<DocumentDatabaseOptions> options, ILogger<SqliteDocumentDatabase>? logger=null)
+  PROPERTY:
     - UseJsonB : bool
   METHODS (impl):
     - Task<IDocumentCollection<T>> GetCollectionAsync<T>(string name) where T : class
     - Task CreateCollectionAsync<T>(string name) where T : class
     - Task DropCollectionAsync(string name)
     - Task<List<string>> ListCollectionNamesAsync()
-    - void Dispose()
-  INTERNAL METHODS:
-    - SqliteConnection CreateConnection() (creates new connection per operation)
-    - bool IsJsonBEnabled()
   CONNECTION MANAGEMENT:
     - Uses connection-per-operation pattern
     - Each database operation creates and disposes its own connection
@@ -99,136 +129,60 @@ CLASS: SqliteDocumentDatabase : IDocumentDatabase
     - Thread-safe schema initialization
     - IMPORTANT: In-memory databases (:memory:) are NOT supported
 
-CLASS (internal): SqliteDocumentCollection<T> : IDocumentCollection<T> where T : class
-  CTORS:
-    - SqliteDocumentCollection(SqliteDocumentDatabase database, string collectionName, ILogger logger, bool useJsonB)
-  PROPERTY (impl):
-    - CollectionName : string
-  METHODS (impl):
-    - Task InsertOneAsync(T document)
-    - Task InsertManyAsync(IEnumerable<T> documents)
-    - Task<T?> FindByIdAsync(DocumentId id)
-    - Task<T?> FindOneAsync(Expression<Func<T, bool>> filter)
-    - Task<List<T>> FindAsync(Expression<Func<T, bool>> filter)
-    - Task<List<T>> FindAllAsync()
-    - Task<List<T>> FindAsync(Expression<Func<T, bool>> filter, int skip, int limit)
-    - Task<long> CountAsync(Expression<Func<T, bool>> filter)
-    - Task<long> CountAllAsync()
-    - Task<bool> UpdateByIdAsync(DocumentId id, T document)
-    - Task<bool> UpdateOneAsync(Expression<Func<T, bool>> filter, T document)
-    - Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction)
-    - Task<bool> DeleteByIdAsync(DocumentId id)
-    - Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter)
-    - Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter)
-    - Task<bool> AnyAsync(Expression<Func<T, bool>> filter)
-    - Task CreateIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression, bool unique=false)
-    - Task DropIndexAsync<TField>(Expression<Func<T, TField>> fieldExpression)
-
-CLASS (internal): CachedDocumentCollection<T> : IDocumentCollection<T> where T : class
-  DETAILS:
-    In-memory caching wrapper for IDocumentCollection<T>.
-    Caches documents by DocumentId in a ConcurrentDictionary.
-    Automatically invalidates cache on writes.
-    Provides transparent caching without changing the API surface.
-
-CLASS (internal static): QueryTranslator
-  STATIC METHODS:
-    - (string WhereClause, List<object?> Parameters) Translate<T>(Expression<Func<T, bool>> expression)
-  DETAILS:
-    Translates LINQ expressions to SQLite WHERE clauses with JSON operations.
-    Supports: ==, !=, >, <, >=, <=, &&, ||, !
-    Supports: String.Contains, String.StartsWith, String.EndsWith
-    Uses json_extract(data, '$.fieldName') for field access.
-    Converts PascalCase properties to camelCase in JSON paths.
-
-CLASS (internal static): Compat
-  DETAILS:
-    Compatibility helpers for netstandard2.0
-  STATIC METHODS:
-    - int GetRandomInt32(int minValue, int maxValue)
-    - void FillRandom(byte[] data, int offset, int count)
-    - byte[] FromHexString(string hex)
-    - string ToHexString(byte[] bytes)
-    - int GetHashCodeForBytes(byte[] bytes)
-
 ================================================
 NAMESPACE: Codezerg.DocumentStore.Configuration
 ------------------------------------------------
-CLASS: DocumentDatabaseOptions
+CLASS: SqliteDatabaseOptions
   PROPERTY:
-    - ConnectionString : string?
-    - UseJsonB : bool (default: true)
+    - ProviderName : string (default: "Microsoft.Data.Sqlite")
+    - ConnectionString : string
     - JournalMode : string? (default: "WAL")
     - PageSize : int? (default: 4096)
     - Synchronous : string? (default: "NORMAL")
-    - CachedCollectionPredicates : List<Func<string, bool>> (internal)
   METHODS:
-    - void Validate() (internal)
+    - void Validate()
+  DETAILS:
+    - Used by SqliteConnectionProvider to configure connection creation
+    - Supports both "Microsoft.Data.Sqlite" and "System.Data.SQLite" providers
+    - Validates that ConnectionString is provided
+    - Validates that PageSize is one of: 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536
+
+CLASS: SqliteDatabaseOptionsBuilder
+  METHODS:
+    - SqliteDatabaseOptionsBuilder UseConnectionString(string connectionString)
+    - SqliteDatabaseOptionsBuilder UseProvider(string providerName)
+    - SqliteDatabaseOptionsBuilder UseJournalMode(string? journalMode)
+    - SqliteDatabaseOptionsBuilder UsePageSize(int? pageSize)
+    - SqliteDatabaseOptionsBuilder UseSynchronous(string? synchronous)
+
+CLASS: DocumentDatabaseOptions
+  PROPERTY:
+    - UseJsonB : bool (default: true)
+  METHODS:
+    - void Validate()
+  DETAILS:
+    - Used by SqliteDocumentDatabase to configure document storage behavior
+    - JSONB provides 20-76% faster operations
 
 CLASS: DocumentDatabaseOptionsBuilder
   METHODS:
-    - DocumentDatabaseOptionsBuilder UseConnectionString(string connectionString)
     - DocumentDatabaseOptionsBuilder UseJsonB(bool useJsonB=true)
-    - DocumentDatabaseOptionsBuilder UseJournalMode(string? journalMode)
-    - DocumentDatabaseOptionsBuilder UsePageSize(int? pageSize)
-    - DocumentDatabaseOptionsBuilder UseSynchronous(string? synchronous)
     - DocumentDatabaseOptionsBuilder CacheCollection(string collectionName)
     - DocumentDatabaseOptionsBuilder CacheCollections(Func<string, bool> predicate)
-    - DocumentDatabaseOptions Build() (internal)
 
 ================================================
-NAMESPACE: Codezerg.DocumentStore.Exceptions
+NAMESPACE: Microsoft.Extensions.DependencyInjection
 ------------------------------------------------
-CLASS: DocumentNotFoundException : Exception
-  PROPERTY:
-    - DocumentId : DocumentId?
-    - CollectionName : string?
-  CTORS:
-    - DocumentNotFoundException()
-    - DocumentNotFoundException(string message)
-    - DocumentNotFoundException(string message, Exception innerException)
-    - DocumentNotFoundException(DocumentId documentId, string collectionName)
-
-CLASS: DuplicateKeyException : Exception
-  PROPERTY:
-    - KeyValue : object?
-    - CollectionName : string?
-  CTORS:
-    - DuplicateKeyException()
-    - DuplicateKeyException(string message)
-    - DuplicateKeyException(string message, Exception innerException)
-    - DuplicateKeyException(object keyValue, string collectionName)
-
-CLASS: InvalidQueryException : Exception
-  PROPERTY:
-    - QueryExpression : string?
-  CTORS:
-    - InvalidQueryException()
-    - InvalidQueryException(string message)
-    - InvalidQueryException(string message, Exception innerException)
-    - InvalidQueryException(string message, string queryExpression)
-
-================================================
-NAMESPACE: Codezerg.DocumentStore.Serialization
-------------------------------------------------
-CLASS (internal): DocumentIdJsonConverter : JsonConverter<DocumentId>
-  METHODS:
-    - DocumentId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    - void Write(Utf8JsonWriter writer, DocumentId value, JsonSerializerOptions options)
-
-CLASS (internal static): DocumentSerializer
-  STATIC PROPERTY:
-    - DefaultOptions : JsonSerializerOptions
-  DETAILS:
-    PropertyNamingPolicy: CamelCase
-    PropertyNameCaseInsensitive: true
-    DefaultIgnoreCondition: WhenWritingNull
-    WriteIndented: false
-    Converters: DocumentIdJsonConverter, JsonStringEnumConverter
+CLASS (static): ServiceCollectionExtensions
   STATIC METHODS:
-    - string Serialize<T>(T document, JsonSerializerOptions? options=null)
-    - T? Deserialize<T>(string json, JsonSerializerOptions? options=null)
-    - T DeserializeNonNull<T>(string json, JsonSerializerOptions? options=null)
+    - IServiceCollection AddSqliteDatabase(this IServiceCollection services, Action<SqliteDatabaseOptionsBuilder> configureOptions)
+    - IServiceCollection AddDocumentDatabase(this IServiceCollection services, Action<DocumentDatabaseOptionsBuilder> configureOptions)
+  DETAILS:
+    Two-tier dependency injection setup:
+    1. AddSqliteDatabase() registers ISqliteConnectionProvider with connection settings
+    2. AddDocumentDatabase() registers IDocumentDatabase with document-specific options
+    Both methods register services as singletons.
+    AddSqliteDatabase must be called before AddDocumentDatabase when using DI.
 
 ================================================
 SCHEMA (SQLite)
@@ -275,31 +229,62 @@ INDEXES:
 ================================================
 USAGE EXAMPLES:
 
-BASIC SETUP:
-var db = new SqliteDocumentDatabase("Data Source=mydb.db");
+BASIC SETUP (Manual instantiation):
+var connectionOptions = Options.Create(new SqliteDatabaseOptions
+{
+    ProviderName = "Microsoft.Data.Sqlite",
+    ConnectionString = "Data Source=mydb.db",
+    JournalMode = "WAL",
+    Synchronous = "NORMAL"
+});
+var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+var databaseOptions = Options.Create(new DocumentDatabaseOptions
+{
+    UseJsonB = true
+});
+var db = new SqliteDocumentDatabase(connectionProvider, databaseOptions);
 var users = await db.GetCollectionAsync<User>("users");
 
-BASIC SETUP (JSONB disabled):
-var db = new SqliteDocumentDatabase("Data Source=mydb.db", useJsonB: false);
-var users = await db.GetCollectionAsync<User>("users");
+BASIC SETUP (Using System.Data.SQLite provider):
+var connectionOptions = Options.Create(new SqliteDatabaseOptions
+{
+    ProviderName = "System.Data.SQLite",
+    ConnectionString = "Data Source=mydb.db",
+    JournalMode = "WAL"
+});
+var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+var databaseOptions = Options.Create(new DocumentDatabaseOptions { UseJsonB = true });
+var db = new SqliteDocumentDatabase(connectionProvider, databaseOptions);
 
 NOTE: In-memory databases (Data Source=:memory:) are NOT supported due to connection-per-operation pattern.
 Each new connection to :memory: creates a separate isolated database.
 Always use file-based databases for both production and testing.
 
-SETUP WITH DI:
-services.AddDocumentDatabase(opts =>
-    opts.UseConnectionString("Data Source=mydb.db")
-        .UseJsonB(true)
-        .UseJournalMode("WAL")
-        .UsePageSize(4096)
-        .UseSynchronous("NORMAL")
-        .CacheCollection("users")
-        .CacheCollections(name => name.StartsWith("hot_")));
+SETUP WITH DI (Recommended):
+// Register connection provider first
+services.AddSqliteDatabase(opts => opts
+    .UseConnectionString("Data Source=mydb.db")
+    .UseProvider("Microsoft.Data.Sqlite")
+    .UseJournalMode("WAL")
+    .UsePageSize(4096)
+    .UseSynchronous("NORMAL"));
+
+// Then register document database
+services.AddDocumentDatabase(opts => opts
+    .UseJsonB(true)
+    .CacheCollection("users")
+    .CacheCollections(name => name.StartsWith("hot_")));
+
 // Then inject IDocumentDatabase in constructor
+public class MyService
+{
+    private readonly IDocumentDatabase _db;
+    public MyService(IDocumentDatabase db) => _db = db;
+}
 
 DOCUMENT CLASSES:
-public class User
+public class User : IDocument
 {
     public DocumentId Id { get; set; }
     public string Name { get; set; }
@@ -392,8 +377,8 @@ DOCUMENT ID DETAILS:
 
 ================================================
 BEST PRACTICES:
-- Document classes should have Id, CreatedAt, UpdatedAt properties for automatic management.
-- Use DI pattern with AddDocumentDatabase() for production applications.
+- Document classes must implement IDocument interface (Id, CreatedAt, UpdatedAt properties).
+- Use two-tier DI pattern: AddSqliteDatabase() then AddDocumentDatabase() for production applications.
 - All queries use json_extract() with SQLite's built-in JSON support.
 - JSONB storage is enabled by default for 20-76% performance improvement.
 - Use collection caching for frequently accessed, read-heavy collections.
@@ -401,14 +386,16 @@ BEST PRACTICES:
 - Use unique indexes to enforce document uniqueness on specific fields.
 - DocumentId is a value type (struct) — lightweight and zero-allocation.
 - JSON is stored as JSONB binary (default) or JSON text in documents table (camelCase for consistency).
-- Exceptions: DocumentNotFoundException, DuplicateKeyException, InvalidQueryException.
+- Library uses standard .NET exceptions (ArgumentException, InvalidOperationException, etc.).
 - QueryTranslator automatically converts filter expressions to SQL WHERE clauses.
 - Nested property filtering is supported via JSON path expressions.
-- GetCollectionAsync is now async - always use await when getting collections.
+- GetCollectionAsync is async - always use await when getting collections.
 - Connection-per-operation: Each operation creates and disposes its own connection.
 - IMPORTANT: In-memory databases (Data Source=:memory:) are NOT compatible with connection-per-operation.
 - Always use file-based databases for production and testing.
-- Dispose() on SqliteDocumentDatabase does not close a persistent connection (no persistent connection exists).
+- SqliteDocumentDatabase does NOT implement IDisposable (no persistent connections to dispose).
+- Don't use 'using' statements with SqliteDocumentDatabase.
+- Supports both Microsoft.Data.Sqlite (default) and System.Data.SQLite providers via ProviderName setting.
 
 PERFORMANCE:
 - JSONB provides 20-76% faster operations (inserts, queries, updates).
@@ -425,4 +412,4 @@ CONNECTION ARCHITECTURE:
 - SQLite pragmas (WAL, page size, synchronous) applied per connection
 - Schema initialized once via thread-safe lazy initialization
 - No persistent connections maintained between operations
-- Disposal cleans up resources but doesn't close a persistent connection
+- IDocumentDatabase does NOT implement IDisposable (nothing to dispose)

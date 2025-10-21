@@ -1,4 +1,6 @@
 using Codezerg.DocumentStore;
+using Codezerg.DocumentStore.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace Codezerg.DocumentStore.Tests;
 
@@ -11,7 +13,19 @@ public class SqliteDocumentCollectionTests : IAsyncLifetime
     public SqliteDocumentCollectionTests()
     {
         _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
-        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}");
+
+        var connectionOptions = Options.Create(new SqliteDatabaseOptions
+        {
+            ConnectionString = $"Data Source={_dbFile}"
+        });
+        var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+        var databaseOptions = Options.Create(new DocumentDatabaseOptions
+        {
+            UseJsonB = true
+        });
+
+        _database = new SqliteDocumentDatabase(connectionProvider, databaseOptions);
     }
 
     public async Task InitializeAsync()
@@ -21,7 +35,6 @@ public class SqliteDocumentCollectionTests : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        _database?.Dispose();
         if (File.Exists(_dbFile))
         {
             try { File.Delete(_dbFile); } catch { }
@@ -420,7 +433,7 @@ public class SqliteDocumentCollectionTests : IAsyncLifetime
         Assert.Equal("Alice", found[0].Name);
     }
 
-    private class TestUser
+    private class TestUser : IDocument
     {
         public DocumentId Id { get; set; }
         public string? Name { get; set; }

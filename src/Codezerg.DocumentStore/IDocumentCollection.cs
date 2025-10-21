@@ -8,8 +8,8 @@ namespace Codezerg.DocumentStore;
 /// <summary>
 /// Represents a collection of documents with type-safe operations.
 /// </summary>
-/// <typeparam name="T">The document type.</typeparam>
-public interface IDocumentCollection<T> where T : class
+/// <typeparam name="T">The document type. Must implement <see cref="IDocument"/>.</typeparam>
+public interface IDocumentCollection<T> where T : class, IDocument
 {
     /// <summary>
     /// Gets the collection name.

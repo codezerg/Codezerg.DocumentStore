@@ -1,4 +1,6 @@
 ﻿using Codezerg.DocumentStore;
+using Codezerg.DocumentStore.Configuration;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,9 +18,23 @@ namespace SampleApp
         {
             Console.WriteLine("=== Codezerg.DocumentStore Sample Application ===\n");
 
-            // Create or open a database
-            // Default: JSONB (binary JSON) storage for optimal performance
-            using var database = new SqliteDocumentDatabase("Data Source=sample.db");
+            var connectionOptions = Options.Create(new SqliteDatabaseOptions()
+            {
+                ProviderName = "Microsoft.Data.Sqlite",
+                ConnectionString = $"Data Source=sample.db",
+                JournalMode = "WAL",
+                Synchronous = "NORMAL"
+            });
+
+            var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+            // Note: We need to use the options pattern to specify a different provider
+            var options = Options.Create(new DocumentDatabaseOptions
+            {
+                UseJsonB = true
+            });
+
+            var database = new SqliteDocumentDatabase(connectionProvider, options);
 
             // Alternative: Use legacy JSON text storage if needed
             // JSONB provides 20-76% faster query operations with minimal storage overhead
@@ -214,7 +230,7 @@ namespace SampleApp
     }
 
     // Sample document classes
-    public class User
+    public class User : IDocument
     {
         public DocumentId Id { get; set; }
         public string? Name { get; set; }
@@ -226,7 +242,7 @@ namespace SampleApp
         public DateTime UpdatedAt { get; set; }
     }
 
-    public class Order
+    public class Order : IDocument
     {
         public DocumentId Id { get; set; }
         public DocumentId UserId { get; set; }

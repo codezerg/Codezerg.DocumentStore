@@ -1,4 +1,6 @@
 using Codezerg.DocumentStore;
+using Codezerg.DocumentStore.Configuration;
+using Microsoft.Extensions.Options;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -15,20 +17,28 @@ class Program
 
         try
         {
-            // Create database using System.Data.SQLite provider
-            // Note: We need to use the options pattern to specify a different provider
-            var options = Microsoft.Extensions.Options.Options.Create(new Codezerg.DocumentStore.Configuration.DocumentDatabaseOptions
+            var connectionOptions = Options.Create(new SqliteDatabaseOptions()
             {
                 ProviderName = "System.Data.SQLite",
                 ConnectionString = $"Data Source={dbFile}",
+                JournalMode = "WAL",
+                Synchronous = "NORMAL"
+            });
+
+            var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+            // Create database using System.Data.SQLite provider
+            // Note: We need to use the options pattern to specify a different provider
+            var options = Options.Create(new DocumentDatabaseOptions
+            {
                 UseJsonB = true
             });
 
-            using var db = new SqliteDocumentDatabase(options);
+            var db = new SqliteDocumentDatabase(connectionProvider, options);
 
             Console.WriteLine($"✓ Database created with provider: System.Data.SQLite");
-            Console.WriteLine($"  Database name: {db.DatabaseName}");
-            Console.WriteLine($"  Connection string: {db.ConnectionString}");
+            Console.WriteLine($"  Database name: {connectionProvider.DatabaseName}");
+            Console.WriteLine($"  Connection string: {connectionProvider.ConnectionString}");
             Console.WriteLine($"  Using JSONB: {db.UseJsonB}\n");
 
             // Get a collection
@@ -114,10 +124,12 @@ class Program
     }
 }
 
-public class User
+public class User : IDocument
 {
     public DocumentId Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public int Age { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }

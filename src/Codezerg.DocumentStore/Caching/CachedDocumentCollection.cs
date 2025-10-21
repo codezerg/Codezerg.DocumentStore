@@ -9,11 +9,12 @@ using System.Threading.Tasks;
 
 namespace Codezerg.DocumentStore.Caching;
 
-internal class CachedDocumentCollection<T> : IDocumentCollection<T> where T : class
+internal class CachedDocumentCollection<T> : IDocumentCollection<T> where T : class, IDocument
 {
     private readonly IDocumentCollection<T> _inner;
     private readonly ConcurrentDictionary<DocumentId, string> _cache = new();
-    private int _isLoaded = 0;
+    private readonly SemaphoreSlim _loadLock = new(1, 1);
+    private volatile bool _isLoaded = false;
 
     public string CollectionName => _inner.CollectionName;
 
@@ -24,14 +25,30 @@ internal class CachedDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
     private async Task EnsureLoadedAsync()
     {
-        if (Interlocked.CompareExchange(ref _isLoaded, 1, 0) == 0)
+        // Fast path: if already loaded, return immediately without acquiring lock
+        if (_isLoaded)
+            return;
+
+        // Slow path: acquire lock and load if still not loaded
+        await _loadLock.WaitAsync();
+        try
         {
+            // Double-check after acquiring lock
+            if (_isLoaded)
+                return;
+
             var allDocuments = await _inner.FindAllAsync();
             foreach (var doc in allDocuments)
             {
                 var id = GetDocumentId(doc);
                 _cache[id] = DocumentSerializer.Serialize(doc);
             }
+
+            _isLoaded = true;
+        }
+        finally
+        {
+            _loadLock.Release();
         }
     }
 
@@ -295,18 +312,6 @@ internal class CachedDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
     private static DocumentId GetDocumentId(T document)
     {
-        var idProperty = typeof(T).GetProperty("Id");
-        if (idProperty != null && idProperty.PropertyType == typeof(DocumentId))
-        {
-            return (DocumentId)(idProperty.GetValue(document) ?? DocumentId.Empty);
-        }
-
-        var idField = typeof(T).GetField("_id");
-        if (idField != null && idField.FieldType == typeof(DocumentId))
-        {
-            return (DocumentId)(idField.GetValue(document) ?? DocumentId.Empty);
-        }
-
-        return DocumentId.Empty;
+        return document.Id;
     }
 }

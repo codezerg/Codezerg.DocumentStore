@@ -1,5 +1,7 @@
 using Codezerg.DocumentStore;
+using Codezerg.DocumentStore.Configuration;
 using Dapper;
+using Microsoft.Extensions.Options;
 
 namespace Codezerg.DocumentStore.Tests;
 
@@ -11,12 +13,23 @@ public class SqliteDocumentDatabaseTests : IDisposable
     public SqliteDocumentDatabaseTests()
     {
         _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
-        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}");
+
+        var connectionOptions = Options.Create(new SqliteDatabaseOptions
+        {
+            ConnectionString = $"Data Source={_dbFile}"
+        });
+        var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+        var databaseOptions = Options.Create(new DocumentDatabaseOptions
+        {
+            UseJsonB = true
+        });
+
+        _database = new SqliteDocumentDatabase(connectionProvider, databaseOptions);
     }
 
     public void Dispose()
     {
-        _database?.Dispose();
         if (File.Exists(_dbFile))
         {
             try { File.Delete(_dbFile); } catch { }
@@ -24,15 +37,17 @@ public class SqliteDocumentDatabaseTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_ShouldCreateInMemoryDatabase()
+    public void Constructor_ShouldCreateDatabase()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
         try
         {
-            using var db = new SqliteDocumentDatabase($"Data Source={tempFile}");
+            var connOpts = Options.Create(new SqliteDatabaseOptions { ConnectionString = $"Data Source={tempFile}" });
+            var connProvider = new SqliteConnectionProvider(connOpts);
+            var dbOpts = Options.Create(new DocumentDatabaseOptions());
+            var db = new SqliteDocumentDatabase(connProvider, dbOpts);
 
             Assert.NotNull(db);
-            Assert.NotEqual(":memory:", db.DatabaseName);
         }
         finally
         {
@@ -49,11 +64,12 @@ public class SqliteDocumentDatabaseTests : IDisposable
         var tempFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
         try
         {
-            using (var db = new SqliteDocumentDatabase($"Data Source={tempFile}"))
-            {
-                Assert.NotNull(db);
-                Assert.NotEqual(":memory:", db.DatabaseName);
-            }
+            var connOpts = Options.Create(new SqliteDatabaseOptions { ConnectionString = $"Data Source={tempFile}" });
+            var connProvider = new SqliteConnectionProvider(connOpts);
+            var dbOpts = Options.Create(new DocumentDatabaseOptions());
+            var db = new SqliteDocumentDatabase(connProvider, dbOpts);
+
+            Assert.NotNull(db);
 
             // Verify file was created
             Assert.True(File.Exists(tempFile));
@@ -136,10 +152,13 @@ public class SqliteDocumentDatabaseTests : IDisposable
         var tempFile = Path.Combine(Path.GetTempPath(), $"test_default_pragma_{Guid.NewGuid()}.db");
         try
         {
-            using var db = new SqliteDocumentDatabase($"Data Source={tempFile}");
+            var connOpts = Options.Create(new SqliteDatabaseOptions { ConnectionString = $"Data Source={tempFile}" });
+            var connProvider = new SqliteConnectionProvider(connOpts);
+            var dbOpts = Options.Create(new DocumentDatabaseOptions());
+            var db = new SqliteDocumentDatabase(connProvider, dbOpts);
 
             // Query pragma values from the database
-            using (var connection = db.CreateConnection())
+            using (var connection = connProvider.CreateConnection())
             {
                 var journalMode = connection.QuerySingle<string>("PRAGMA journal_mode;");
                 var pageSize = connection.QuerySingle<int>("PRAGMA page_size;");
@@ -165,19 +184,19 @@ public class SqliteDocumentDatabaseTests : IDisposable
         var tempFile = Path.Combine(Path.GetTempPath(), $"test_pragma_{Guid.NewGuid()}.db");
         try
         {
-            var options = Microsoft.Extensions.Options.Options.Create(
-                new Configuration.DocumentDatabaseOptions
-                {
-                    ConnectionString = $"Data Source={tempFile}",
-                    JournalMode = "DELETE",
-                    PageSize = 8192,
-                    Synchronous = "FULL"
-                });
-
-            using var db = new SqliteDocumentDatabase(options);
+            var connOpts = Options.Create(new SqliteDatabaseOptions
+            {
+                ConnectionString = $"Data Source={tempFile}",
+                JournalMode = "DELETE",
+                PageSize = 8192,
+                Synchronous = "FULL"
+            });
+            var connProvider = new SqliteConnectionProvider(connOpts);
+            var dbOpts = Options.Create(new DocumentDatabaseOptions());
+            var db = new SqliteDocumentDatabase(connProvider, dbOpts);
 
             // Query pragma values from the database
-            using (var connection = db.CreateConnection())
+            using (var connection = connProvider.CreateConnection())
             {
                 var journalMode = connection.QuerySingle<string>("PRAGMA journal_mode;");
                 var pageSize = connection.QuerySingle<int>("PRAGMA page_size;");
@@ -203,16 +222,16 @@ public class SqliteDocumentDatabaseTests : IDisposable
         var tempFile = Path.Combine(Path.GetTempPath(), $"test_null_pragma_{Guid.NewGuid()}.db");
         try
         {
-            var options = Microsoft.Extensions.Options.Options.Create(
-                new Configuration.DocumentDatabaseOptions
-                {
-                    ConnectionString = $"Data Source={tempFile}",
-                    JournalMode = null,
-                    PageSize = null,
-                    Synchronous = null
-                });
-
-            using var db = new SqliteDocumentDatabase(options);
+            var connOpts = Options.Create(new SqliteDatabaseOptions
+            {
+                ConnectionString = $"Data Source={tempFile}",
+                JournalMode = null,
+                PageSize = null,
+                Synchronous = null
+            });
+            var connProvider = new SqliteConnectionProvider(connOpts);
+            var dbOpts = Options.Create(new DocumentDatabaseOptions());
+            var db = new SqliteDocumentDatabase(connProvider, dbOpts);
 
             // Should not throw exception
             Assert.NotNull(db);
@@ -226,9 +245,11 @@ public class SqliteDocumentDatabaseTests : IDisposable
         }
     }
 
-    private class TestDocument
+    private class TestDocument : IDocument
     {
         public DocumentId Id { get; set; }
         public string? Name { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 }

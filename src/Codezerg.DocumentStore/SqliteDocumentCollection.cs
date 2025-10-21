@@ -14,8 +14,8 @@ namespace Codezerg.DocumentStore;
 /// <summary>
 /// SQLite-backed document collection implementation.
 /// </summary>
-/// <typeparam name="T">The document type.</typeparam>
-internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : class
+/// <typeparam name="T">The document type. Must implement <see cref="IDocument"/>.</typeparam>
+internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : class, IDocument
 {
     private readonly SqliteDocumentDatabase _database;
     private readonly string _collectionName;
@@ -80,22 +80,20 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
             if (document == null)
                 throw new ArgumentNullException(nameof(document));
 
-            var id = GetDocumentId(document);
-            // Check if ID is empty or default (ToString returns empty string for both)
-            if (id == DocumentId.Empty || string.IsNullOrEmpty(id.ToString()))
+            // Check if ID is empty or default and assign new ID if needed
+            if (document.Id == DocumentId.Empty || string.IsNullOrEmpty(document.Id.ToString()))
             {
-                id = DocumentId.NewId();
-                SetDocumentId(document, id);
+                document.Id = DocumentId.NewId();
             }
 
             SetTimestamps(document, isNew: true);
 
             var json = DocumentSerializer.Serialize(document);
 
-            insertParams.Add((id, new
+            insertParams.Add((document.Id, new
             {
                 CollectionId = collectionId,
-                DocumentId = id.ToString(),
+                DocumentId = document.Id.ToString(),
                 Data = json,
                 CreatedAt = now.ToString("O"),
                 UpdatedAt = now.ToString("O")
@@ -295,7 +293,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
         var collectionId = await GetCollectionIdAsync();
 
-        SetDocumentId(document, id);
+        document.Id = id;
         SetTimestamps(document, isNew: false);
 
         var json = DocumentSerializer.Serialize(document);
@@ -329,8 +327,7 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         if (existing == null)
             return false;
 
-        var id = GetDocumentId(existing);
-        return await UpdateByIdAsync(id, document);
+        return await UpdateByIdAsync(existing.Id, document);
     }
 
     public async Task<long> UpdateManyAsync(Expression<Func<T, bool>> filter, Action<T> updateAction)
@@ -338,11 +335,10 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         var documents = await FindAsync(filter);
         long updatedCount = 0;
 
-        foreach (var doc in documents)
+        foreach (var document in documents)
         {
-            updateAction(doc);
-            var id = GetDocumentId(doc);
-            if (await UpdateByIdAsync(id, doc))
+            updateAction(document);
+            if (await UpdateByIdAsync(document.Id, document))
                 updatedCount++;
         }
 
@@ -371,12 +367,11 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
 
     public async Task<bool> DeleteOneAsync(Expression<Func<T, bool>> filter)
     {
-        var doc = await FindOneAsync(filter);
-        if (doc == null)
+        var document = await FindOneAsync(filter);
+        if (document == null)
             return false;
 
-        var id = GetDocumentId(doc);
-        return await DeleteByIdAsync(id);
+        return await DeleteByIdAsync(document.Id);
     }
 
     public async Task<long> DeleteManyAsync(Expression<Func<T, bool>> filter)
@@ -465,58 +460,16 @@ internal class SqliteDocumentCollection<T> : IDocumentCollection<T> where T : cl
         }
     }
 
-    private static DocumentId GetDocumentId(T document)
-    {
-        var idProperty = typeof(T).GetProperty("Id");
-        if (idProperty != null && idProperty.PropertyType == typeof(DocumentId))
-        {
-            return (DocumentId)(idProperty.GetValue(document) ?? DocumentId.Empty);
-        }
-
-        // Check for _id field
-        var idField = typeof(T).GetField("_id");
-        if (idField != null && idField.FieldType == typeof(DocumentId))
-        {
-            return (DocumentId)(idField.GetValue(document) ?? DocumentId.Empty);
-        }
-
-        return DocumentId.Empty;
-    }
-
-    private static void SetDocumentId(T document, DocumentId id)
-    {
-        var idProperty = typeof(T).GetProperty("Id");
-        if (idProperty != null && idProperty.PropertyType == typeof(DocumentId) && idProperty.CanWrite)
-        {
-            idProperty.SetValue(document, id);
-            return;
-        }
-
-        var idField = typeof(T).GetField("_id");
-        if (idField != null && idField.FieldType == typeof(DocumentId))
-        {
-            idField.SetValue(document, id);
-        }
-    }
-
     private static void SetTimestamps(T document, bool isNew)
     {
         var now = DateTime.UtcNow;
 
         if (isNew)
         {
-            var createdAtProperty = typeof(T).GetProperty("CreatedAt");
-            if (createdAtProperty != null && createdAtProperty.PropertyType == typeof(DateTime) && createdAtProperty.CanWrite)
-            {
-                createdAtProperty.SetValue(document, now);
-            }
+            document.CreatedAt = now;
         }
 
-        var updatedAtProperty = typeof(T).GetProperty("UpdatedAt");
-        if (updatedAtProperty != null && updatedAtProperty.PropertyType == typeof(DateTime) && updatedAtProperty.CanWrite)
-        {
-            updatedAtProperty.SetValue(document, now);
-        }
+        document.UpdatedAt = now;
     }
 
     private static string GetFieldName<TField>(Expression<Func<T, TField>> fieldExpression)

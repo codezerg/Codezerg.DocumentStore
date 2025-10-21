@@ -23,13 +23,15 @@ dotnet add package Codezerg.DocumentStore
 ### 1. Define your document model
 
 ```csharp
-public class User
+public class User : IDocument  // Must implement IDocument
 {
-    public DocumentId Id { get; set; }  // Auto-assigned on insert
+    public DocumentId Id { get; set; }          // Auto-assigned on insert
     public string Name { get; set; }
     public string Email { get; set; }
     public int Age { get; set; }
     public Address Address { get; set; }
+    public DateTime CreatedAt { get; set; }     // Auto-assigned on insert
+    public DateTime UpdatedAt { get; set; }     // Auto-updated on save
 }
 
 public class Address
@@ -43,8 +45,18 @@ public class Address
 
 ```csharp
 using Codezerg.DocumentStore;
+using Codezerg.DocumentStore.Configuration;
+using Microsoft.Extensions.Options;
 
-using var db = new SqliteDocumentDatabase("Data Source=myapp.db");
+var connectionOptions = Options.Create(new SqliteDatabaseOptions
+{
+    ConnectionString = "Data Source=myapp.db"
+});
+var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+var databaseOptions = Options.Create(new DocumentDatabaseOptions());
+var db = new SqliteDocumentDatabase(connectionProvider, databaseOptions);
+
 var users = await db.GetCollectionAsync<User>("users");
 ```
 
@@ -103,23 +115,23 @@ The library uses a **connection-per-operation pattern** where each database oper
 - Proper resource cleanup after each operation
 - Better isolation between operations
 
-**Important**: In-memory databases (`:memory:`) are not supported because each new connection creates a separate in-memory database. Always use file-based databases:
+**Important**: In-memory databases (`:memory:`) are not supported because each new connection creates a separate in-memory database. Always use file-based databases.
 
-```csharp
-// Recommended: File-based database
-using var db = new SqliteDocumentDatabase("Data Source=myapp.db");
-
-// NOT supported with connection-per-operation
-// using var db = new SqliteDocumentDatabase("Data Source=:memory:");
-```
+**Note**: `SqliteDocumentDatabase` does NOT implement `IDisposable` because it maintains no persistent connections. Each operation creates and disposes its own connection automatically. Don't use `using` statements with the database instance.
 
 ### Dependency Injection
 
 ```csharp
-services.AddDocumentDatabase(options =>
-    options.UseConnectionString("Data Source=myapp.db")
-           .UseJsonB(true)
-           .CacheCollection("users"));
+// Register connection provider first
+services.AddSqliteDatabase(options => options
+    .UseConnectionString("Data Source=myapp.db")
+    .UseProvider("Microsoft.Data.Sqlite")
+    .UseJournalMode("WAL"));
+
+// Then register document database
+services.AddDocumentDatabase(options => options
+    .UseJsonB(true)
+    .CacheCollection("users"));
 
 public class MyService
 {
@@ -162,10 +174,16 @@ JSONB binary storage is enabled by default and provides significant performance 
 
 ```csharp
 // JSONB enabled (default) - 20-76% faster
-var db = new SqliteDocumentDatabase("Data Source=app.db");
+var databaseOptions = Options.Create(new DocumentDatabaseOptions
+{
+    UseJsonB = true  // This is the default
+});
 
 // Disable JSONB if needed (uses JSON text storage)
-var db = new SqliteDocumentDatabase("Data Source=app.db", useJsonB: false);
+var databaseOptions = Options.Create(new DocumentDatabaseOptions
+{
+    UseJsonB = false
+});
 ```
 
 ### Collection Caching
@@ -173,11 +191,13 @@ var db = new SqliteDocumentDatabase("Data Source=app.db", useJsonB: false);
 Enable in-memory caching for frequently accessed collections:
 
 ```csharp
-services.AddDocumentDatabase(options =>
-    options.UseConnectionString("Data Source=app.db")
-           .CacheCollection("users")
-           .CacheCollection("products")
-           .CacheCollections(name => name.StartsWith("hot_")));
+services.AddSqliteDatabase(options => options
+    .UseConnectionString("Data Source=app.db"));
+
+services.AddDocumentDatabase(options => options
+    .CacheCollection("users")
+    .CacheCollection("products")
+    .CacheCollections(name => name.StartsWith("hot_")));
 ```
 
 ## Query Translation

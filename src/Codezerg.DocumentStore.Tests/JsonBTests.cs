@@ -1,4 +1,6 @@
 using Codezerg.DocumentStore;
+using Codezerg.DocumentStore.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace Codezerg.DocumentStore.Tests;
 
@@ -11,8 +13,19 @@ public class JsonBTests : IAsyncLifetime
     public JsonBTests()
     {
         _dbFile = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
-        // Create database with JSONB enabled
-        _database = new SqliteDocumentDatabase($"Data Source={_dbFile}", useJsonB: true);
+
+        var connectionOptions = Options.Create(new SqliteDatabaseOptions
+        {
+            ConnectionString = $"Data Source={_dbFile}"
+        });
+        var connectionProvider = new SqliteConnectionProvider(connectionOptions);
+
+        var databaseOptions = Options.Create(new DocumentDatabaseOptions
+        {
+            UseJsonB = true
+        });
+
+        _database = new SqliteDocumentDatabase(connectionProvider, databaseOptions);
     }
 
     public async Task InitializeAsync()
@@ -22,7 +35,6 @@ public class JsonBTests : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        _database?.Dispose();
         if (File.Exists(_dbFile))
         {
             try { File.Delete(_dbFile); } catch { }
@@ -212,11 +224,13 @@ public class JsonBTests : IAsyncLifetime
         Assert.DoesNotContain(results, d => d.Name == "Alice");
     }
 
-    private class TestDocument
+    private class TestDocument : IDocument
     {
         public DocumentId Id { get; set; }
         public string? Name { get; set; }
         public int Age { get; set; }
         public string? Email { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 }
